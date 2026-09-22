@@ -1,0 +1,4 @@
+These are public notes served by the /file endpoint.
+This file is intentionally harmless — the vulnerability being tested is
+whether an attacker can supply a path like ../../../../etc/passwd
+to escape this "files" directory (CWE-22, Path Traversal).
