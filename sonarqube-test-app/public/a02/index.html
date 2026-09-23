@@ -2,20 +2,365 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>A02: Cryptographic Failures — Coming Soon</title>
+<title>A02: Cryptographic Failures</title>
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
   <header class="topbar">
-    <h1>A02: Cryptographic Failures</h1>
-    <a class="home-link" href="/">&larr; All categories</a>
+    <h1>A02:2021 — Cryptographic Failures</h1>
+    <div class="row" style="margin:0;">
+      <button class="info-btn" id="btnLearn">ℹ️ Learn A02 (deep dive)</button>
+      <a class="home-link" href="/">&larr; All categories</a>
+    </div>
   </header>
+
+  <div class="banner">
+    ⚠️ Every action on this screen is intentionally exploitable. No login is required — cryptographic failures are about how data is stored, transmitted, and transformed, not who's asking for it.
+  </div>
+
   <main>
+    <!-- Variant 1 -->
     <section class="variant">
-      <h2>Coming soon</h2>
-      <p class="desc">This screen hasn't been built yet. Share the details for this category (specific vulnerability variants you want demonstrated) and it'll be added next, following the same pattern as the A01 screen.</p>
+      <h2>Variant 1 — Cleartext Storage of Sensitive Data at Rest</h2>
+      <div class="cwe">CWE-312 / CWE-313 · GET /api/a02/payment-methods</div>
+      <p class="desc">Stored payment methods, straight from the "database" — full card numbers and CVVs as plain strings, exactly like a stolen backup or an over-privileged internal tool would see them.</p>
+      <div class="row"><button onclick="v1()">GET /api/a02/payment-methods</button></div>
+      <pre class="out" id="v1_out">—</pre>
+      <footer class="remediation">Fix: never store CVVs at all (PCI-DSS forbids it post-auth); encrypt card numbers at the field level or use a tokenization provider; mask on display.</footer>
+    </section>
+
+    <!-- Variant 2 -->
+    <section class="variant">
+      <h2>Variant 2 — Weak / Broken Hashing Algorithm for Passwords</h2>
+      <div class="cwe">CWE-327 / CWE-759 · GET /api/a02/weak-hash-users · POST /api/a02/crack-hash</div>
+      <p class="desc">Passwords hashed with unsalted MD5 — fast and pattern-prone. A tiny common-password dictionary cracks them instantly.</p>
+      <div class="row"><button onclick="v2list()">GET /api/a02/weak-hash-users</button></div>
+      <pre class="out" id="v2_list_out">—</pre>
+      <div class="row">
+        <input id="v2_hash" style="flex:1; min-width:280px;" placeholder="paste a passwordHash from above" />
+        <button onclick="v2crack()">Crack via common-password dictionary</button>
+      </div>
+      <pre class="out" id="v2_out">—</pre>
+      <footer class="remediation">Fix: use a slow, salted, purpose-built password hash (bcrypt, scrypt, or Argon2id) with a per-user salt and a tuned work factor.</footer>
+    </section>
+
+    <!-- Variant 3 -->
+    <section class="variant">
+      <h2>Variant 3 — Reversible Encryption Instead of a One-Way Hash for Passwords</h2>
+      <div class="cwe">CWE-328 · GET /api/a02/legacy-users · GET /api/a02/legacy-users/:id/decrypt</div>
+      <p class="desc">These "legacy" passwords are encrypted, not hashed — which means the original plaintext can be recovered by anyone holding the key (see Variant 4).</p>
+      <div class="row"><button onclick="v3list()">GET /api/a02/legacy-users</button></div>
+      <pre class="out" id="v3_list_out">—</pre>
+      <div class="row">
+        <input id="v3_id" value="1" size="4" />
+        <button onclick="v3decrypt()">Decrypt password</button>
+      </div>
+      <pre class="out" id="v3_out">—</pre>
+      <footer class="remediation">Fix: passwords must be hashed (one-way), never encrypted (two-way). If original plaintext must ever be recoverable, that's a sign it shouldn't be a "password" field at all.</footer>
+    </section>
+
+    <!-- Variant 4 -->
+    <section class="variant">
+      <h2>Variant 4 — Hard-Coded Cryptographic Keys &amp; Secrets</h2>
+      <div class="cwe">CWE-321 / CWE-798 · GET /api/a02/leaked-config</div>
+      <p class="desc">Simulates a leaked debug/config endpoint (or a secret committed to source control) exposing the exact key that decrypts every record in Variant 3, all at once.</p>
+      <div class="row"><button class="danger" onclick="v4()">GET /api/a02/leaked-config</button></div>
+      <pre class="out" id="v4_out">—</pre>
+      <footer class="remediation">Fix: never hard-code keys in source. Use a secrets manager / KMS, rotate keys, and scope them so no single leak compromises the entire dataset.</footer>
+    </section>
+
+    <!-- Variant 5 -->
+    <section class="variant">
+      <h2>Variant 5 — Insecure Cryptographic Mode (ECB) / Broken Algorithm</h2>
+      <div class="cwe">CWE-327 / CWE-326 · POST /api/a02/ecb-demo</div>
+      <p class="desc">ECB mode encrypts each block independently — identical plaintext always produces identical ciphertext. Try the same PIN for both fields, then try different ones.</p>
+      <div class="row">
+        <input id="v5_pin1" value="1234" size="8" placeholder="pin 1" />
+        <input id="v5_pin2" value="1234" size="8" placeholder="pin 2" />
+        <button onclick="v5()">Encrypt both (ECB vs CBC+random IV)</button>
+      </div>
+      <pre class="out" id="v5_out">—</pre>
+      <p class="hint">Same PIN twice: ECB ciphertexts match (pattern leak). CBC+random IV ciphertexts never match, even for identical input.</p>
+      <footer class="remediation">Fix: never use ECB. Use an authenticated mode with a random IV/nonce per message (e.g. AES-256-GCM), and never reuse a nonce with the same key.</footer>
+    </section>
+
+    <!-- Variant 6 -->
+    <section class="variant">
+      <h2>Variant 6 — Missing Encryption in Transit / Insecure Cookie Attributes</h2>
+      <div class="cwe">CWE-319 / CWE-523 · GET /api/a02/security-headers</div>
+      <p class="desc">The app runs on plain HTTP with no HSTS, and sets a "remember me" cookie with none of the flags that protect it in transit or from script access.</p>
+      <div class="row"><button onclick="v6()">GET /api/a02/security-headers</button></div>
+      <pre class="out" id="v6_out">—</pre>
+      <footer class="remediation">Fix: serve everything over HTTPS, send Strict-Transport-Security, and set Secure + HttpOnly + SameSite on every session/auth cookie.</footer>
+    </section>
+
+    <!-- Variant 7 -->
+    <section class="variant">
+      <h2>Variant 7 — Insecure Randomness for a Security Token (Brute-Forceable Password Reset)</h2>
+      <div class="cwe">CWE-330 / CWE-338 · POST /api/a02/reset/request · POST /api/a02/reset/verify</div>
+      <p class="desc">The reset code is generated with <code>Math.random()</code> (not a CSPRNG), is only 3 digits, never expires, and the verify endpoint has no rate limiting — brute-forceable in under a second.</p>
+      <div class="row">
+        <input id="v7_email" value="victim@example.com" size="20" />
+        <button onclick="v7request()">Request reset code (simulated — code isn't shown to you)</button>
+      </div>
+      <pre class="out" id="v7_req_out">—</pre>
+      <div class="row"><button class="danger" onclick="v7bruteforce()">Brute-force all 1,000 possible codes</button></div>
+      <pre class="out" id="v7_out">—</pre>
+      <footer class="remediation">Fix: generate tokens with a CSPRNG (crypto.randomInt / crypto.randomBytes), make them long, expire them quickly, and rate-limit/lock out the verify endpoint.</footer>
+    </section>
+
+    <!-- Variant 8 -->
+    <section class="variant">
+      <h2>Variant 8 — Improper Certificate / TLS Validation on Outbound Requests</h2>
+      <div class="cwe">CWE-295 · GET /api/a02/tls-check</div>
+      <p class="desc">Compares a properly-validating HTTPS client against one configured with <code>rejectUnauthorized:false</code>, against badssl.com's public test certificates. Requires the server to have outbound internet access.</p>
+      <div class="row">
+        <select id="v8_target">
+          <option value="expired">expired certificate</option>
+          <option value="self-signed">self-signed certificate</option>
+          <option value="wrong-host">wrong hostname</option>
+          <option value="untrusted-root">untrusted root CA</option>
+        </select>
+        <button onclick="v8()">Run TLS check</button>
+      </div>
+      <pre class="out" id="v8_out">—</pre>
+      <footer class="remediation">Fix: never set rejectUnauthorized:false (or an equivalent) in production. Pin certificates/CAs if needed, but always validate the chain and hostname.</footer>
+    </section>
+
+    <!-- Variant 9 -->
+    <section class="variant">
+      <h2>Variant 9 — Sensitive Data Exposure via Logging</h2>
+      <div class="cwe">CWE-532 · POST /api/a02/legacy-login · GET /api/a02/logs</div>
+      <p class="desc">A "helpful" debug log line records the raw username and password on every login attempt — and this app then exposes those logs with no access control at all.</p>
+      <div class="row">
+        <input id="v9_user" value="admin" size="12" />
+        <input id="v9_pass" value="hunter2" size="12" />
+        <button onclick="v9login()">Trigger a login attempt</button>
+      </div>
+      <div class="row"><button class="ghost" onclick="viewLogs('v9_out')">View server logs</button></div>
+      <pre class="out" id="v9_out">—</pre>
+      <footer class="remediation">Fix: never log credentials, tokens, or other secrets. Redact/mask sensitive fields before they reach any logger, and restrict log access.</footer>
+    </section>
+
+    <!-- Variant 10 -->
+    <section class="variant">
+      <h2>Variant 10 — Sensitive Data Exposed in a URL (Query String)</h2>
+      <div class="cwe">CWE-598 · POST /api/a02/magic-link</div>
+      <p class="desc">A "magic login" link carries the raw session token as a URL query parameter. URLs like this land in access logs, browser history, and Referer headers — in plaintext.</p>
+      <div class="row">
+        <input id="v10_email" value="alice@example.com" size="20" />
+        <button onclick="v10()">Generate magic link</button>
+      </div>
+      <pre class="out" id="v10_out">—</pre>
+      <div class="row"><button class="ghost" onclick="viewLogs('v10_out')">View server logs (proves the token leaked)</button></div>
+      <footer class="remediation">Fix: put tokens in the request body, an Authorization header, or a short-lived signed cookie — never in a URL that will be logged, cached, bookmarked, or shared.</footer>
     </section>
   </main>
+
+  <!-- ==================================================================
+       "Learn A02" deep-dive modal — reference material for new learners.
+       ================================================================== -->
+  <div class="modal-overlay" id="learnModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>📘 Deep Dive: OWASP A02:2021 — Cryptographic Failures</h2>
+        <button class="ghost" id="btnCloseLearn">✕ Close</button>
+      </div>
+      <div class="modal-body">
+
+        <p>Cryptographic Failures moved up to <strong>#2</strong> on the OWASP Top 10 (2021), a renaming and refocusing of the old "Sensitive Data Exposure" category: exposure is the <em>symptom</em>, a cryptographic failure is usually the <em>root cause</em>. It's mapped to 29 CWEs — the broadest data set behind any 2021 category.</p>
+        <div class="stat-strip">
+          <div class="stat-box"><div class="num">#2</div><div class="label">OWASP Top 10 (2021) ranking</div></div>
+          <div class="stat-box"><div class="num">29</div><div class="label">CWEs mapped to this category</div></div>
+          <div class="stat-box"><div class="num">300+</div><div class="label">CVEs referencing these CWEs in the source dataset</div></div>
+        </div>
+
+        <h3>1. Core Concept: Encoding vs. Hashing vs. Encryption</h3>
+        <p>These three are constantly confused, and mixing them up is itself the root of several variants below:</p>
+        <table class="ref-table">
+          <tr><th>Property</th><th>Encoding</th><th>Hashing</th><th>Encryption</th></tr>
+          <tr><td>Purpose</td><td>Format conversion (Base64, URL-encode)</td><td>One-way fingerprint / integrity check</td><td>Two-way confidentiality</td></tr>
+          <tr><td>Reversible?</td><td>Yes, trivially, no key needed</td><td>No, by design</td><td>Yes, with the correct key</td></tr>
+          <tr><td>Needs a secret key?</td><td>No</td><td>No (optionally salted)</td><td>Yes</td></tr>
+          <tr><td>Right use case</td><td>Making binary data safe to embed in text/URLs/JSON</td><td>Passwords, integrity checks, deduplication</td><td>Data you must get back in original form (files, DB fields, tokens in transit)</td></tr>
+          <tr><td>Wrong use (seen in the wild)</td><td>Base64("password") stored as if it were "encrypted"</td><td>Hashing a credit card number you need to display later</td><td>"Encrypting" a password so it can be emailed back to the user</td></tr>
+        </table>
+        <div class="flow-diagram">
+          <div class="flow-step"><strong>Plaintext</strong>"hunter2"</div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-step bad"><strong>Encoding</strong>base64: aHVudGVyMg== (reversible by anyone, no key)</div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-step good"><strong>Hashing</strong>bcrypt: $2b$12$... (nobody can reverse this)</div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-step"><strong>Encryption</strong>AES-GCM ciphertext (reversible only with the key)</div>
+        </div>
+
+        <h3>2. The Variants</h3>
+        <p>This lab implements 10 variants — expand each for the mechanism, vulnerable code, and how it's exploited:</p>
+
+        <details class="variant-detail">
+          <summary>Variant 1 — Cleartext Storage of Sensitive Data at Rest <span class="cwe-tag">CWE-312 / CWE-313</span></summary>
+          <p><strong>Mechanism:</strong> sensitive fields (full card numbers, CVVs, government IDs) are written to the database exactly as received — no field-level encryption, no tokenization, no masking on read.</p>
+          <p><strong>Impact:</strong> anyone with database/backup read access (a DBA, a misconfigured backup bucket, a SQL injection elsewhere in the app) gets the raw sensitive data with no extra step required.</p>
+          <div class="code-block"><div class="lang">Node.js — data/crypto-store.js (vulnerable, this app)</div><pre>const paymentMethods = [
+  { id: 1, user: 'alice', cardNumber: '4111111111111111', cvv: '123', expiry: '04/27' },
+  // ...stored, queried, and returned exactly like this — no encryption, no masking
+];</pre></div>
+          <p><strong>Attack scenario:</strong> an internal tool (or an attacker who reaches the database another way) calls <code>GET /api/a02/payment-methods</code> and receives full card numbers and CVVs in the clear — the kind of data breach that triggers PCI-DSS fines and mandatory disclosure.</p>
+        </details>
+
+        <details class="variant-detail">
+          <summary>Variant 2 — Weak / Broken Hashing Algorithm for Passwords <span class="cwe-tag">CWE-327 / CWE-759</span></summary>
+          <p><strong>Mechanism:</strong> passwords are hashed with MD5 (designed for speed and checksums, not secrecy) and no per-user salt, so two users with the same password get the identical hash.</p>
+          <p><strong>Impact:</strong> unsalted, fast hashes are crackable via precomputed rainbow tables or simple dictionary attacks in milliseconds — MD5 hardware-accelerated cracking now exceeds billions of hashes per second.</p>
+          <div class="code-block"><div class="lang">Node.js — data/crypto-store.js (vulnerable, this app)</div><pre>function md5(input) {
+  return crypto.createHash('md5').update(input).digest('hex');
+}
+const weakHashUsers = [
+  { id: 2, username: 'bob', passwordHash: md5('letmein') }, // no salt, fast algorithm
+];</pre></div>
+          <p><strong>Attack scenario:</strong> an attacker who obtains the hash list runs it against a common-password dictionary (this lab uses ~12 entries; real attacks use billions). Any user who chose a common password is cracked instantly — that's exactly what <code>POST /api/a02/crack-hash</code> demonstrates.</p>
+        </details>
+
+        <details class="variant-detail">
+          <summary>Variant 3 — Reversible Encryption Instead of a One-Way Hash for Passwords <span class="cwe-tag">CWE-328</span></summary>
+          <p><strong>Mechanism:</strong> instead of hashing passwords (which can never be reversed), the app encrypts them with AES — a two-way operation. Anyone with the key can recover the original password.</p>
+          <p><strong>Impact:</strong> defeats the entire point of "protecting" the password. A hash breach only exposes hashes (which still require cracking); an encryption-key breach exposes every password instantly and exactly as typed.</p>
+          <div class="code-block"><div class="lang">Node.js — data/crypto-store.js (vulnerable, this app)</div><pre>function legacyEncrypt(plaintext) {
+  const cipher = crypto.createCipheriv('aes-256-cbc', HARD_CODED_KEY, HARD_CODED_IV);
+  return Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]).toString('hex');
+}
+function legacyDecrypt(hex) {
+  const decipher = crypto.createDecipheriv('aes-256-cbc', HARD_CODED_KEY, HARD_CODED_IV);
+  return Buffer.concat([decipher.update(Buffer.from(hex, 'hex')), decipher.final()]).toString('utf8');
+}</pre></div>
+          <p><strong>Attack scenario:</strong> with the key from Variant 4 (or just by reading the source), <code>GET /api/a02/legacy-users/1/decrypt</code> returns dave's original plaintext password directly — no cracking, no guessing, just decryption.</p>
+        </details>
+
+        <details class="variant-detail">
+          <summary>Variant 4 — Hard-Coded Cryptographic Keys &amp; Secrets <span class="cwe-tag">CWE-321 / CWE-798</span></summary>
+          <p><strong>Mechanism:</strong> the AES key and IV used everywhere in this app are constants baked directly into the source file — the same thing as committing them to git, or leaving a debug endpoint that echoes them back.</p>
+          <p><strong>Impact:</strong> a single leak (a public GitHub repo, a decompiled mobile app, a support ticket with a stack trace, or — as demonstrated here — a debug endpoint) compromises every record ever encrypted with that key, all at once, forever (until the key is rotated and everything re-encrypted).</p>
+          <div class="code-block"><div class="lang">Node.js — data/crypto-store.js (vulnerable, this app)</div><pre>const HARD_CODED_KEY = crypto.createHash('sha256').update('lab-super-secret-key-2021').digest();
+const HARD_CODED_IV = Buffer.from('0123456789abcdef'); // static, reused for every record</pre></div>
+          <p><strong>Attack scenario:</strong> <code>GET /api/a02/leaked-config</code> hands the key and IV straight to the caller — from here, every "legacy" password in Variant 3 and every PIN in Variant 5 can be decrypted offline, with no further access to the app required.</p>
+        </details>
+
+        <details class="variant-detail">
+          <summary>Variant 5 — Insecure Cryptographic Mode (ECB) / Broken Algorithm <span class="cwe-tag">CWE-327 / CWE-326</span></summary>
+          <p><strong>Mechanism:</strong> AES in ECB mode encrypts each fixed-size block independently with no chaining and no IV — identical plaintext blocks always produce identical ciphertext blocks.</p>
+          <p><strong>Impact:</strong> without ever breaking the key, an observer can tell which records share the same underlying value (the classic demonstration is encrypting an image in ECB mode — the outline remains visible in the ciphertext).</p>
+          <div class="code-block"><div class="lang">Node.js — data/crypto-store.js (vulnerable, this app)</div><pre>function ecbEncrypt(plaintext) {
+  const cipher = crypto.createCipheriv('aes-256-ecb', HARD_CODED_KEY, null); // no IV — that's the flaw
+  return Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]).toString('hex');
+}</pre></div>
+          <p><strong>Attack scenario:</strong> two users both pick the PIN "1234". Their "encrypted" values are byte-for-byte identical. An attacker who has compromised the ciphertext store (but not the key) can still cluster users by shared secret values — e.g. flag every account using the most common PIN, without decrypting anything.</p>
+        </details>
+
+        <details class="variant-detail">
+          <summary>Variant 6 — Missing Encryption in Transit / Insecure Cookie Attributes <span class="cwe-tag">CWE-319 / CWE-523</span></summary>
+          <p><strong>Mechanism:</strong> the app is served over plain HTTP with no HTTP Strict-Transport-Security header, and session/"remember me" cookies are set without <code>Secure</code>, <code>HttpOnly</code>, or <code>SameSite</code>.</p>
+          <p><strong>Impact:</strong> credentials and session tokens can be intercepted in transit on any shared or hostile network (public wifi, a compromised router, a malicious proxy); without <code>Secure</code> a cookie set once over HTTPS can still leak if the user is ever downgraded to HTTP; without <code>HttpOnly</code> it's readable by any injected script (pairs badly with an XSS bug elsewhere).</p>
+          <div class="code-block"><div class="lang">Node.js — routes/a02.js (vulnerable, this app)</div><pre>// Vulnerable: no Secure, no HttpOnly, no SameSite
+res.cookie('remember_me', 'token-in-cleartext-demo', {});</pre></div>
+          <p><strong>Attack scenario:</strong> an attacker on the same coffee-shop wifi runs a packet sniffer; the cookie and any HTTP-transmitted credentials appear in plaintext in the capture, ready to be replayed.</p>
+        </details>
+
+        <details class="variant-detail">
+          <summary>Variant 7 — Insecure Randomness for a Security Token <span class="cwe-tag">CWE-330 / CWE-338</span></summary>
+          <p><strong>Mechanism:</strong> the password-reset code is generated with <code>Math.random()</code> — a fast, statistically-biased PRNG never intended for security use — producing only a 3-digit code (1,000 possibilities), with no expiry and no rate limit on verification.</p>
+          <p><strong>Impact:</strong> the entire keyspace can be exhausted client-side in well under a second, letting an attacker take over any account via "forgot password" without ever seeing the real code.</p>
+          <div class="code-block"><div class="lang">Node.js — data/crypto-store.js (vulnerable, this app)</div><pre>function generateWeakResetToken() {
+  // Math.random() is not cryptographically secure, and 3 digits is tiny
+  return String(Math.floor(Math.random() * 1000)).padStart(3, '0');
+}</pre></div>
+          <p><strong>Attack scenario:</strong> the "Brute-force all 1,000 possible codes" button above does exactly this: it fires all 1,000 guesses at <code>POST /api/a02/reset/verify</code> with no lockout in place, and reports back the moment one succeeds.</p>
+        </details>
+
+        <details class="variant-detail">
+          <summary>Variant 8 — Improper Certificate / TLS Validation on Outbound Requests <span class="cwe-tag">CWE-295</span></summary>
+          <p><strong>Mechanism:</strong> an HTTPS client is configured with <code>rejectUnauthorized:false</code> (or the equivalent in another language/library), which disables certificate chain, expiry, and hostname verification entirely.</p>
+          <p><strong>Impact:</strong> the connection is still "encrypted" in the sense that traffic is scrambled, but there's no guarantee it's scrambled to the intended server — a machine-in-the-middle presenting any certificate (expired, self-signed, for the wrong domain) is accepted without complaint.</p>
+          <div class="code-block"><div class="lang">Node.js — routes/a02.js (vulnerable, this app)</div><pre>const agent = new https.Agent({ rejectUnauthorized: false }); // disables cert validation entirely
+https.get(url, { agent }, (res) => { /* ... */ });</pre></div>
+          <p><strong>Attack scenario:</strong> this pattern is common in "fix it later" workarounds for expired internal certificates. An attacker positioned on the network path (compromised wifi, DNS hijack, malicious proxy) presents their own certificate for the target host; the vulnerable client accepts it and happily sends requests through the attacker.</p>
+        </details>
+
+        <details class="variant-detail">
+          <summary>Variant 9 — Sensitive Data Exposure via Logging <span class="cwe-tag">CWE-532</span></summary>
+          <p><strong>Mechanism:</strong> a debug/troubleshooting log statement records complete request data — including passwords — verbatim, and that log is either broadly accessible or exposed by another bug (as demonstrated here, an unauthenticated endpoint).</p>
+          <p><strong>Impact:</strong> logs are often replicated to multiple systems (log aggregators, SIEMs, ticketing systems attached to error reports, developer laptops during debugging) — far more copies, with far looser access control, than the primary database.</p>
+          <div class="code-block"><div class="lang">Node.js — routes/a02.js (vulnerable, this app)</div><pre>store.log(`Login attempt username=${username} password=${password}`); // logs the raw password</pre></div>
+          <p><strong>Attack scenario:</strong> click "Trigger a login attempt" above with any username/password, then "View server logs" — the password you typed is sitting there in plaintext, exactly as a real debug log left enabled in production would expose it.</p>
+        </details>
+
+        <details class="variant-detail">
+          <summary>Variant 10 — Sensitive Data Exposed in a URL (Query String) <span class="cwe-tag">CWE-598</span></summary>
+          <p><strong>Mechanism:</strong> a security token (session ID, password-reset code, API key) is placed in a URL's query string rather than a request body, header, or cookie.</p>
+          <p><strong>Impact:</strong> URLs are logged by web servers, reverse proxies, and CDNs by default; they're stored in browser history and autocomplete; and if the page ever links to a third-party resource, the full URL — token included — can leak via the <code>Referer</code> header.</p>
+          <div class="code-block"><div class="lang">Node.js — routes/a02.js (vulnerable, this app)</div><pre>const magicLink = `/api/a02/magic-login?token=${token}&email=${encodeURIComponent(email)}`;
+store.log(`GET ${magicLink} 200 — (simulated access log entry)`); // token now lives in the access log too</pre></div>
+          <p><strong>Attack scenario:</strong> "Generate magic link" above creates exactly this kind of URL; "View server logs" then shows the token sitting in the access log in plaintext — the same way it would sit in any real reverse-proxy or CDN log by default.</p>
+        </details>
+
+        <h3>3. Why Common "Fixes" Fail (False Senses of Security)</h3>
+        <div class="myth">
+          <strong>Myth 1: "It's Base64-encoded, so it's protected."</strong>
+          <p>Base64 (and similarly, XOR "obfuscation," hex, or ROT13-style tricks) is encoding, not encryption — there is no key, and anyone can reverse it in one line of code. Encoding hides data from a glance, not from an attacker.</p>
+        </div>
+        <div class="myth">
+          <strong>Myth 2: "We use HTTPS everywhere, so we don't need to worry about crypto elsewhere."</strong>
+          <p>Transport encryption (HTTPS/TLS) only protects data in transit between two endpoints. It does nothing for data at rest in the database, in backups, in logs, or in memory — and does nothing to fix weak hashing, hard-coded keys, or a bad PRNG.</p>
+        </div>
+        <div class="myth">
+          <strong>Myth 3: "We hash passwords with SHA-256, so we're following best practice."</strong>
+          <p>SHA-256 is a fast, general-purpose cryptographic hash — exactly the wrong property for passwords. Fast hashes let an attacker who steals the hash database try billions of guesses per second on cheap GPU hardware. Passwords need a slow, memory-hard, purpose-built hash (bcrypt, scrypt, Argon2id) with a tunable work factor and a per-user salt.</p>
+        </div>
+
+        <h3>4. Architectural Defense</h3>
+        <h4>Layer 1 — Classify data, then apply the matching primitive</h4>
+        <p>Decide upfront what's sensitive (PII, credentials, payment data, tokens, health data) and pick the right tool: a slow salted hash for passwords, authenticated encryption (AES-GCM/ChaCha20-Poly1305) with a fresh nonce for data you must recover, and a CSPRNG for anything unpredictable (tokens, session IDs, reset codes).</p>
+
+        <h4>Layer 2 — Key management, not key hard-coding</h4>
+        <p>Keys belong in a secrets manager or KMS (AWS KMS, HashiCorp Vault, GCP KMS, Azure Key Vault), loaded at runtime, rotated on a schedule, and scoped so a single leak has blast-radius limits.</p>
+        <div class="code-block"><div class="lang">Node.js — secure password hashing (conceptual)</div><pre>const bcrypt = require('bcrypt');
+
+// Storing a password
+const passwordHash = await bcrypt.hash(plainPassword, 12); // salted + slow, tunable cost factor
+
+// Verifying a password
+const ok = await bcrypt.compare(candidatePassword, passwordHash);</pre></div>
+        <div class="code-block"><div class="lang">Node.js — authenticated encryption with a random nonce (conceptual)</div><pre>const { randomBytes, createCipheriv, createDecipheriv } = require('crypto');
+
+function encrypt(plaintext, key) {
+  const iv = randomBytes(12); // fresh nonce every time — never reused
+  const cipher = createCipheriv('aes-256-gcm', key, iv);
+  const ciphertext = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
+  const authTag = cipher.getAuthTag(); // detects any tampering with the ciphertext
+  return { iv, ciphertext, authTag };
+}</pre></div>
+
+        <h4>Layer 3 — Enforce transport security &amp; secure defaults</h4>
+        <p>Redirect all HTTP to HTTPS, send <code>Strict-Transport-Security</code>, and set <code>Secure; HttpOnly; SameSite=Strict</code> (or <code>Lax</code>) on every session cookie. Use a CSPRNG (<code>crypto.randomBytes</code>/<code>crypto.randomInt</code>) for every token, and never write secrets to logs — scrub them at the logging layer, not by developer discipline alone.</p>
+
+        <h3>5. Developer Checklist to Prevent A02</h3>
+        <table class="ref-table">
+          <tr><th>Phase</th><th>Action item</th></tr>
+          <tr><td>Classify</td><td>Identify every field that's PII, a credential, payment data, or a security token — this drives which primitive applies.</td></tr>
+          <tr><td>Passwords</td><td>Use bcrypt/scrypt/Argon2id with a per-user salt. Never MD5/SHA-1/SHA-256 alone, and never reversible encryption.</td></tr>
+          <tr><td>Encryption</td><td>Use authenticated encryption (AES-GCM) with a fresh, random nonce per message. Never ECB. Never a static/reused IV.</td></tr>
+          <tr><td>Key management</td><td>No hard-coded keys. Use a secrets manager/KMS; rotate keys; scope them to limit blast radius.</td></tr>
+          <tr><td>Randomness</td><td>Use a CSPRNG (crypto.randomBytes/randomInt) for every token, reset code, and session ID — never Math.random().</td></tr>
+          <tr><td>Transit</td><td>HTTPS everywhere, HSTS enabled, and Secure/HttpOnly/SameSite on every sensitive cookie.</td></tr>
+          <tr><td>Logging</td><td>Redact secrets (passwords, tokens, card numbers) before they reach any logger; restrict who/what can read logs.</td></tr>
+          <tr><td>URLs</td><td>Never place tokens or secrets in a URL query string — use the body, an Authorization header, or a signed cookie.</td></tr>
+        </table>
+
+      </div>
+    </div>
+  </div>
+
+  <script src="/a02/a02.js"></script>
 </body>
 </html>

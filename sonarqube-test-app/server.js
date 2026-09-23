@@ -7,8 +7,9 @@
  *            rule validation, and manual/DAST practice (e.g. OWASP ZAP,
  *            Burp Suite).
  *
- *  Status  : A01 (Broken Access Control) is fully implemented. A02–A10
- *            are placeholder screens, to be filled in next.
+ *  Status  : A01 (Broken Access Control) and A02 (Cryptographic Failures)
+ *            are fully implemented. A03–A10 are placeholder screens, to be
+ *            filled in next.
  *
  *  DO NOT deploy this application to production, a shared network, or the
  *  public internet. It contains deliberate security flaws by design.
@@ -21,6 +22,7 @@ const cookieParser = require('cookie-parser');
 const path = require('path');
 
 const a01Routes = require('./routes/a01');
+const a02Routes = require('./routes/a02');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -43,8 +45,9 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 /* ------------------------------ Category routers ------------------------------ */
 app.use('/api/a01', a01Routes);
+app.use('/api/a02', a02Routes);
 
-// Future: app.use('/api/a02', a02Routes); etc., as each category is built.
+// Future: app.use('/api/a03', a03Routes); etc., as each category is built.
 
 app.listen(PORT, () => {
   console.log(`OWASP Top 10 Learning Lab running at http://localhost:${PORT}`);
