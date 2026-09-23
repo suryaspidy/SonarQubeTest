@@ -8,7 +8,7 @@
 </head>
 <body>
   <header class="topbar">
-    <h1>A01:2021 — Broken Access Control</h1>
+    <h1>A01:2025 — Broken Access Control</h1>
     <div class="row" style="margin:0;">
       <button class="info-btn" id="btnLearn">ℹ️ Learn A01 (deep dive)</button>
       <a class="home-link" href="/">&larr; All categories</a>
@@ -171,7 +171,7 @@
     <!-- Variant 11 -->
     <section class="variant">
       <h2>Variant 11 — Path Traversal Bypassing Access Restriction on Files</h2>
-      <div class="cwe">CWE-22 / CWE-23 (mapped under A01:2021) · GET /api/a01/files</div>
+      <div class="cwe">CWE-22 / CWE-23 (mapped under A01:2025) · GET /api/a01/files</div>
       <p class="desc">Meant to serve only your own tenant's invoice. Try <code>tenant=tenant-2</code> to read the other tenant's file, or <code>name=../secrets.txt</code> to escape the tenant folder and reach an app-wide secret.</p>
       <div class="row">
         <input id="v11_tenant" value="tenant-1" size="10" />
@@ -190,7 +190,7 @@
   <div class="modal-overlay" id="learnModal">
     <div class="modal">
       <div class="modal-header">
-        <h2>📘 Deep Dive: OWASP A01:2021 — Broken Access Control</h2>
+        <h2>📘 Deep Dive: OWASP A01:2025 — Broken Access Control</h2>
         <button class="ghost" id="btnCloseLearn">✕ Close</button>
       </div>
       <div class="modal-body">

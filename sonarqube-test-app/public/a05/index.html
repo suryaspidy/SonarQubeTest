@@ -2,20 +2,319 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>A05: Security Misconfiguration — Coming Soon</title>
+<title>A05: Injection</title>
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
   <header class="topbar">
-    <h1>A05: Security Misconfiguration</h1>
-    <a class="home-link" href="/">&larr; All categories</a>
+    <h1>A05:2025 — Injection</h1>
+    <div class="row" style="margin:0;">
+      <button class="info-btn" id="btnLearn">ℹ️ Learn A05 (deep dive)</button>
+      <a class="home-link" href="/">&larr; All categories</a>
+    </div>
   </header>
+
+  <div class="banner">
+    ⚠️ Every action on this screen is intentionally exploitable. No login is required. The two XSS variants open a real new tab so the injected script actually executes in your browser — that's expected.
+  </div>
+
   <main>
+    <!-- Variant 1 -->
     <section class="variant">
-      <h2>Coming soon</h2>
-      <p class="desc">This screen hasn't been built yet. Share the details for this category (specific vulnerability variants you want demonstrated) and it'll be added next, following the same pattern as the A01 screen.</p>
+      <h2>Variant 1 — SQL Injection: Authentication Bypass</h2>
+      <div class="cwe">CWE-89 · POST /api/a05/sql-login</div>
+      <p class="desc">The query is built by string concatenation against a <strong>real embedded SQLite database</strong> (Node's built-in <code>node:sqlite</code>) — no parameterization.</p>
+      <div class="row">
+        <input id="v1_user" style="flex:1; min-width:220px;" value="' OR '1'='1' --" />
+        <input id="v1_pass" value="anything" size="12" />
+        <button class="danger" onclick="v1()">POST /api/a05/sql-login</button>
+      </div>
+      <pre class="out" id="v1_out">—</pre>
+      <footer class="remediation">Fix: use parameterized queries / prepared statement bind parameters — never concatenate user input into SQL text.</footer>
+    </section>
+
+    <!-- Variant 2 -->
+    <section class="variant">
+      <h2>Variant 2 — SQL Injection: UNION-Based Data Exfiltration</h2>
+      <div class="cwe">CWE-89 · GET /api/a05/search</div>
+      <p class="desc">A "search users" feature vulnerable to the same flaw — exploited with <code>UNION SELECT</code> to pull rows from an unrelated <code>api_keys</code> table.</p>
+      <div class="row">
+        <input id="v2_q" style="flex:1; min-width:320px;" value="' UNION SELECT service, key_value FROM api_keys --" />
+        <button class="danger" onclick="v2()">GET /api/a05/search</button>
+      </div>
+      <pre class="out" id="v2_out">—</pre>
+      <footer class="remediation">Fix: parameterized queries, plus least-privilege DB accounts so a compromised query can't reach unrelated tables at all.</footer>
+    </section>
+
+    <!-- Variant 3 -->
+    <section class="variant">
+      <h2>Variant 3 — OS Command Injection</h2>
+      <div class="cwe">CWE-77 / CWE-78 · GET /api/a05/ping</div>
+      <p class="desc">User input is concatenated directly into a real shell command (<code>ping -c 1 &lt;host&gt;</code>).</p>
+      <div class="row">
+        <input id="v3_host" style="flex:1; min-width:260px;" value="127.0.0.1; whoami" />
+        <button class="danger" onclick="v3()">GET /api/a05/ping</button>
+      </div>
+      <pre class="out" id="v3_out">—</pre>
+      <footer class="remediation">Fix: never build shell commands from user input; use an execFile/spawn call with an argument array (no shell interpretation) and an allow-list of valid hosts.</footer>
+    </section>
+
+    <!-- Variant 4 -->
+    <section class="variant">
+      <h2>Variant 4 — Code Injection via eval()</h2>
+      <div class="cwe">CWE-94 / CWE-95 · POST /api/a05/calculate</div>
+      <p class="desc">A "calculator" evaluates the user's expression directly with <code>eval()</code>.</p>
+      <div class="row">
+        <input id="v4_expr" style="flex:1; min-width:300px;" value="require('os').hostname()" />
+        <button class="danger" onclick="v4()">POST /api/a05/calculate</button>
+      </div>
+      <pre class="out" id="v4_out">—</pre>
+      <footer class="remediation">Fix: never eval() user input. Use a real, sandboxed expression-only parser (e.g. mathjs in "limited" mode) if arbitrary math is genuinely required.</footer>
+    </section>
+
+    <!-- Variant 5 -->
+    <section class="variant">
+      <h2>Variant 5 — Reflected Cross-Site Scripting (XSS)</h2>
+      <div class="cwe">CWE-79 · GET /api/a05/greet</div>
+      <p class="desc">User input is reflected into the HTML response unescaped. Open it in a real tab to see the script execute (fetch alone won't run it).</p>
+      <div class="row">
+        <input id="v5_name" style="flex:1; min-width:320px;" value="&lt;script&gt;alert('Reflected XSS on ' + document.domain)&lt;/script&gt;" />
+        <button class="danger" onclick="v5open()">Open in new tab (executes)</button>
+        <button class="ghost" onclick="v5fetch()">Fetch raw HTML instead</button>
+      </div>
+      <pre class="out" id="v5_out">—</pre>
+      <footer class="remediation">Fix: HTML-escape all untrusted output by context (HTML body, attribute, JS, URL); prefer a templating engine with auto-escaping on by default; add a Content-Security-Policy.</footer>
+    </section>
+
+    <!-- Variant 6 -->
+    <section class="variant">
+      <h2>Variant 6 — Stored Cross-Site Scripting (XSS)</h2>
+      <div class="cwe">CWE-79 / CWE-80 · POST /api/a05/comments · GET /api/a05/comments</div>
+      <p class="desc">Comment content is stored, then rendered back unescaped for every future visitor.</p>
+      <div class="row">
+        <input id="v6_comment" style="flex:1; min-width:340px;" value="&lt;img src=x onerror=&quot;alert('Stored XSS: ' + document.cookie)&quot;&gt;" />
+        <button onclick="v6post()">Post comment</button>
+      </div>
+      <div class="row"><button class="danger" onclick="v6open()">Open /api/a05/comments in new tab (executes)</button></div>
+      <pre class="out" id="v6_out">—</pre>
+      <footer class="remediation">Fix: HTML-escape stored content on render, or sanitize on input with an allow-list-based library (e.g. DOMPurify) if some HTML must be preserved.</footer>
+    </section>
+
+    <!-- Variant 7 -->
+    <section class="variant">
+      <h2>Variant 7 — NoSQL Injection (Operator Injection)</h2>
+      <div class="cwe">CWE-943 · POST /api/a05/nosql-login (raw JSON)</div>
+      <p class="desc">Sending <code>password</code> as an <em>object</em> instead of a string — e.g. <code>{"$ne": null}</code> — smuggles a MongoDB-style query operator straight into the lookup.</p>
+      <div class="row">
+        <textarea id="v7_json" style="flex:1; min-width:340px; height:70px; background:var(--panel-2); color:var(--text); border:1px solid var(--border); border-radius:6px; font-family:var(--mono); font-size:12px; padding:8px;">{"username":"admin","password":{"$ne":null}}</textarea>
+      </div>
+      <div class="row"><button class="danger" onclick="v7()">POST raw JSON to /api/a05/nosql-login</button></div>
+      <pre class="out" id="v7_out">—</pre>
+      <footer class="remediation">Fix: validate the type/shape of every field server-side (reject objects where a string is expected) before it ever reaches a query.</footer>
+    </section>
+
+    <!-- Variant 8 -->
+    <section class="variant">
+      <h2>Variant 8 — LDAP Injection</h2>
+      <div class="cwe">CWE-90 · GET /api/a05/ldap-search</div>
+      <p class="desc">The <code>uid</code> parameter is spliced into an LDAP filter — <code>(&amp;(uid=&lt;input&gt;)(objectClass=person))</code> — with no escaping of <code>( ) * \</code>.</p>
+      <div class="row">
+        <input id="v8_uid" style="flex:1; min-width:300px;" value="*)(uid=*))(|(uid=*" />
+        <button class="danger" onclick="v8()">GET /api/a05/ldap-search</button>
+      </div>
+      <pre class="out" id="v8_out">—</pre>
+      <p class="hint">Try uid=alice first (returns just alice), then the payload above (returns everyone).</p>
+      <footer class="remediation">Fix: escape LDAP special characters ( ) * \ NUL per RFC 4515 before building any filter, or use a library that does this for you.</footer>
+    </section>
+
+    <!-- Variant 9 -->
+    <section class="variant">
+      <h2>Variant 9 — XPath Injection</h2>
+      <div class="cwe">CWE-91 / CWE-643 · POST /api/a05/xpath-login</div>
+      <p class="desc">An XML-backed login lookup built by string concatenation into an XPath-style boolean expression. Inject the same payload into <em>both</em> fields to neutralize the AND.</p>
+      <div class="row">
+        <input id="v9_user" style="flex:1; min-width:200px;" value="x' or '1'='1" />
+        <input id="v9_pass" style="flex:1; min-width:200px;" value="x' or '1'='1" />
+        <button class="danger" onclick="v9()">POST /api/a05/xpath-login</button>
+      </div>
+      <pre class="out" id="v9_out">—</pre>
+      <footer class="remediation">Fix: use parameterized XPath (XQuery/XPath variable bindings), never string-concatenated queries.</footer>
+    </section>
+
+    <!-- Variant 10 -->
+    <section class="variant">
+      <h2>Variant 10 — Server-Side Template Injection (SSTI) / Expression Language Injection</h2>
+      <div class="cwe">CWE-917 / CWE-94 · POST /api/a05/welcome</div>
+      <p class="desc">User input becomes part of the template <em>source</em>, not just a substituted value — embedding <code>{{ }}</code> reaches the template evaluator, including real code execution.</p>
+      <div class="row">
+        <input id="v10_name" style="flex:1; min-width:340px;" value="{{ require('child_process').execSync('whoami').toString().trim() }}" />
+        <button class="danger" onclick="v10()">POST /api/a05/welcome</button>
+      </div>
+      <pre class="out" id="v10_out">—</pre>
+      <p class="hint">Try {{ 7*7 }} first for a harmless arithmetic proof, then the full payload above.</p>
+      <footer class="remediation">Fix: never let user input become template source; if a template engine is required, run it in a real sandbox with no access to globals/require, or use a logic-less templating language.</footer>
+    </section>
+
+    <!-- Variant 11 -->
+    <section class="variant">
+      <h2>Variant 11 — Log / CRLF Injection (Log Forging)</h2>
+      <div class="cwe">CWE-93 / CWE-117 · POST /api/a05/log-event · GET /api/a05/logs</div>
+      <p class="desc">Unneutralized newlines in user input let an attacker forge fake extra log lines. (Node itself blocks raw CRLF in real HTTP headers — see the Learn modal — so this demo targets application logs instead, which have no such built-in protection.)</p>
+      <div class="row">
+        <textarea id="v11_user" style="flex:1; min-width:340px; height:70px; background:var(--panel-2); color:var(--text); border:1px solid var(--border); border-radius:6px; font-family:var(--mono); font-size:12px; padding:8px;">attacker
+[AUDIT] Login attempt for user: admin (verified by security team)</textarea>
+      </div>
+      <div class="row">
+        <button class="danger" onclick="v11post()">POST /api/a05/log-event</button>
+        <button class="ghost" onclick="v11view()">View logs</button>
+      </div>
+      <pre class="out" id="v11_out">—</pre>
+      <footer class="remediation">Fix: strip or encode CR/LF (and other control characters) from any value before writing it to a log, or use a structured logger (JSON lines) where a forged value can't create a new "line".</footer>
     </section>
   </main>
+
+  <!-- ==================================================================
+       "Learn A05" deep-dive modal — sourced from OWASP Top 10:2025.
+       ================================================================== -->
+  <div class="modal-overlay" id="learnModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>📘 Deep Dive: OWASP A05:2025 — Injection</h2>
+        <button class="ghost" id="btnCloseLearn">✕ Close</button>
+      </div>
+      <div class="modal-body">
+
+        <p>Injection sits at <strong>#5</strong> in OWASP's <a href="https://owasp.org/Top10/2025/A05_2025-Injection/" target="_blank" rel="noopener">Top 10:2025</a> (down two spots from #3 in 2021). It's one of the most heavily tested categories — <strong>100%</strong> of applications tested showed some form of injection — and it has more mapped CWEs (37) and more total CVEs than any other 2025 category.</p>
+        <div class="stat-strip">
+          <div class="stat-box"><div class="num">#5</div><div class="label">OWASP Top 10:2025 ranking (was #3 in 2021)</div></div>
+          <div class="stat-box"><div class="num">37</div><div class="label">CWEs mapped — the most of any 2025 category</div></div>
+          <div class="stat-box"><div class="num">62,445</div><div class="label">total CVEs — the highest of any 2025 category</div></div>
+        </div>
+        <p class="hint">Cross-site Scripting (CWE-79) alone accounts for over 30,000 of those CVEs (high frequency, lower average impact); SQL Injection accounts for over 14,000 (lower frequency, higher average impact) — together they pull the category's average weighted impact down even though individual SQLi incidents are often severe.</p>
+
+        <h3>1. What Counts as "Injection"?</h3>
+        <p>Per OWASP: an injection flaw lets untrusted input reach an interpreter — a browser, a database, the command line, an LDAP server, a template engine — and causes that interpreter to execute part of the input as commands, rather than treating it purely as data. An app is vulnerable when:</p>
+        <ul>
+          <li>User-supplied data is not validated, filtered, or sanitized.</li>
+          <li>Dynamic queries or non-parameterized calls without context-aware escaping are used directly in the interpreter.</li>
+          <li>Unsanitized data is used within ORM search parameters to extract additional, sensitive records.</li>
+          <li>Hostile data is directly concatenated so the interpreter's structure and the data are mixed together in one string.</li>
+        </ul>
+        <p>Common injection targets, per OWASP's own description: <strong>SQL, NoSQL, OS command, ORM, LDAP</strong>, and <strong>Expression Language (EL) / OGNL</strong> injection — "the concept is identical among all interpreters." A related, newer class — <a href="https://genai.owasp.org/llmrisk/llm01-prompt-injection/" target="_blank" rel="noopener">LLM Prompt Injection</a> — is significant enough that OWASP now tracks it separately in the OWASP LLM Top 10 rather than folding it in here.</p>
+
+        <h3>2. The Variants</h3>
+        <p>This lab implements 11 variants, covering every injection target OWASP names by name, plus both forms of XSS. Expand each for the mechanism, vulnerable code, and how it's exploited:</p>
+
+        <details class="variant-detail">
+          <summary>Variant 1 — SQL Injection: Authentication Bypass <span class="cwe-tag">CWE-89</span></summary>
+          <p><strong>OWASP Example Attack Scenario #1 (adapted):</strong> <code>String query = "SELECT * FROM accounts WHERE custID='" + request.getParameter("id") + "'";</code> — an attacker sends <code>' OR '1'='1</code> and the query's meaning changes to "return everything."</p>
+          <div class="code-block"><div class="lang">Node.js — routes/a05.js (vulnerable, this app)</div><pre>const query = \`SELECT id, username, role FROM users WHERE username = '\${username}' AND password = '\${password}'\`;
+const row = db.prepare(query).get(); // real SQLite, no parameterization</pre></div>
+          <p><strong>Attack scenario:</strong> submitting <code>username = ' OR '1'='1' --</code> turns the query into <code>...WHERE username = '' OR '1'='1' --' AND password='...'</code> — the trailing <code>--</code> comments out the password check entirely, logging in as the first user in the table with no valid credentials at all.</p>
+        </details>
+
+        <details class="variant-detail">
+          <summary>Variant 2 — SQL Injection: UNION-Based Data Exfiltration <span class="cwe-tag">CWE-89</span></summary>
+          <p><strong>Mechanism:</strong> the same unparameterized-query flaw, but exploited with <code>UNION SELECT</code> to append rows from a completely different table onto the legitimate result set.</p>
+          <div class="code-block"><div class="lang">SQL — exploit payload</div><pre>SELECT username, role FROM users WHERE username LIKE '%' UNION SELECT service, key_value FROM api_keys --%'</pre></div>
+          <p><strong>Attack scenario:</strong> the response above disguises leaked Stripe/AWS API keys as extra "username"/"role" rows — proving that even a low-sensitivity endpoint (a user search box) can leak data from tables it was never designed to touch, entirely because of one string-concatenated query.</p>
+        </details>
+
+        <details class="variant-detail">
+          <summary>Variant 3 — OS Command Injection <span class="cwe-tag">CWE-77 / CWE-78</span></summary>
+          <p><strong>OWASP Example Attack Scenario #3:</strong> <code>String cmd = "nslookup " + request.getParameter("domain"); Runtime.getRuntime().exec(cmd);</code> — an attacker supplies <code>example.com; cat /etc/passwd</code> to run arbitrary commands.</p>
+          <div class="code-block"><div class="lang">Node.js — routes/a05.js (vulnerable, this app)</div><pre>exec(\`ping -c 1 \${host}\`, (err, stdout, stderr) => { /* ... */ }); // host is user input</pre></div>
+          <p><strong>Attack scenario:</strong> submitting <code>host = 127.0.0.1; whoami</code> runs <em>two</em> commands — the intended ping AND the attacker's injected <code>whoami</code> — because the shell treats <code>;</code> as a command separator, not part of a hostname.</p>
+        </details>
+
+        <details class="variant-detail">
+          <summary>Variant 4 — Code Injection via eval() <span class="cwe-tag">CWE-94 / CWE-95</span></summary>
+          <p><strong>Mechanism:</strong> a feature meant to evaluate simple math expressions passes user input directly to <code>eval()</code>, which executes arbitrary JavaScript, not just arithmetic.</p>
+          <div class="code-block"><div class="lang">Node.js — routes/a05.js (vulnerable, this app)</div><pre>const result = eval(expression); // expression is fully attacker-controlled</pre></div>
+          <p><strong>Attack scenario:</strong> instead of <code>2+2</code>, the attacker sends <code>require('os').hostname()</code> or worse — <code>require('child_process').execSync('id')</code> — turning a calculator into full Node.js code execution.</p>
+        </details>
+
+        <details class="variant-detail">
+          <summary>Variant 5 — Reflected Cross-Site Scripting (XSS) <span class="cwe-tag">CWE-79</span></summary>
+          <p><strong>Mechanism:</strong> a query parameter is written directly into the HTML response with no escaping, so a <code>&lt;script&gt;</code> tag in the URL executes in the victim's browser exactly as if the site itself wrote it.</p>
+          <div class="code-block"><div class="lang">Node.js — routes/a05.js (vulnerable, this app)</div><pre>res.send(\`&lt;h1&gt;Hello, \${name}!&lt;/h1&gt;\`); // name is the raw query parameter</pre></div>
+          <p><strong>Attack scenario:</strong> an attacker sends a victim a link like <code>/api/a05/greet?name=&lt;script&gt;...&lt;/script&gt;</code>. The victim's own browser, in the site's own origin, runs the attacker's script — able to read cookies, make authenticated requests, or deface the page.</p>
+        </details>
+
+        <details class="variant-detail">
+          <summary>Variant 6 — Stored Cross-Site Scripting (XSS) <span class="cwe-tag">CWE-79 / CWE-80</span></summary>
+          <p><strong>Mechanism:</strong> the same missing-escaping flaw, but the payload is saved server-side first (a comment, a profile field, a support ticket) and then rendered to <em>every</em> visitor who views that content later — no per-victim link required.</p>
+          <div class="code-block"><div class="lang">Node.js — routes/a05.js (vulnerable, this app)</div><pre>const html = comments.map(c => \`&lt;div&gt;\${c}&lt;/div&gt;\`).join(''); // c is raw stored input</pre></div>
+          <p><strong>Attack scenario:</strong> one attacker posts a malicious comment once; from then on, every visitor who opens the comments page runs the attacker's script in their own session — far more impactful than reflected XSS since no individual targeting is needed.</p>
+        </details>
+
+        <details class="variant-detail">
+          <summary>Variant 7 — NoSQL Injection (Operator Injection) <span class="cwe-tag">CWE-943</span></summary>
+          <p><strong>Mechanism:</strong> a document-database query is built directly from parsed JSON request fields. Since JSON supports objects as values, a client can send <code>{"password": {"$ne": null}}</code> instead of a string — and a query layer that doesn't validate types honors the operator.</p>
+          <div class="code-block"><div class="lang">Node.js — data/injection-store.js (vulnerable, this app)</div><pre>if ('$ne' in v) return doc[k] !== v.$ne; // no check that v was ever supposed to be an object</pre></div>
+          <p><strong>Attack scenario:</strong> a normal login form only ever sends strings, so the developer never validates the type — but nothing stops a client from posting raw JSON with <code>password</code> as an object, turning "password not equal to null" (always true for a real password) into an automatic bypass.</p>
+        </details>
+
+        <details class="variant-detail">
+          <summary>Variant 8 — LDAP Injection <span class="cwe-tag">CWE-90</span></summary>
+          <p><strong>Mechanism:</strong> an LDAP search filter — parenthesized prefix notation like <code>(&amp;(uid=alice)(objectClass=person))</code> — is built by splicing raw input into the <code>uid=</code> term, with none of LDAP's required special-character escaping.</p>
+          <div class="code-block"><div class="lang">Node.js — data/injection-store.js (vulnerable, this app)</div><pre>const filterStr = \`(&(uid=\${uidInput})(objectClass=person))\`; // uidInput unescaped</pre></div>
+          <p><strong>Attack scenario:</strong> the classic payload <code>*)(uid=*))(|(uid=*</code> injects extra, unbalanced parentheses that restructure the filter's logic entirely — turning "find the one user named X" into "find everyone," returning the full directory instead of a single record.</p>
+        </details>
+
+        <details class="variant-detail">
+          <summary>Variant 9 — XPath Injection <span class="cwe-tag">CWE-91 / CWE-643</span></summary>
+          <p><strong>Mechanism:</strong> the same string-concatenation flaw as SQL injection, applied to an XPath-style boolean expression used to query an XML-backed data store.</p>
+          <div class="code-block"><div class="lang">Node.js — data/injection-store.js (vulnerable, this app)</div><pre>const expr = \`username='\${username}' and password='\${password}'\`; // then evaluated as a boolean expression</pre></div>
+          <p><strong>Attack scenario:</strong> injecting <code>x' or '1'='1</code> into both fields turns the expression into one that's true regardless of the real stored values — <code>username='x' or '1'='1' and password='x' or '1'='1'</code> is true the moment either trailing <code>'1'='1'</code> clause is reached, authenticating as the first user with no valid credentials.</p>
+        </details>
+
+        <details class="variant-detail">
+          <summary>Variant 10 — Server-Side Template Injection (SSTI) / Expression Language Injection <span class="cwe-tag">CWE-917 / CWE-94</span></summary>
+          <p><strong>Mechanism:</strong> user input is concatenated into the template's <em>source string</em> before it's rendered — so a value like <code>{{ 7*7 }}</code> isn't just displayed, it's evaluated by the template engine as an expression.</p>
+          <div class="code-block"><div class="lang">Node.js — routes/a05.js + data/injection-store.js (vulnerable, this app)</div><pre>const template = \`Hello, \${name}! Welcome back.\`; // name becomes part of the SOURCE
+const rendered = naiveTemplateRender(template, { name, require }); // require exposed in scope</pre></div>
+          <p><strong>Attack scenario:</strong> <code>{{ 7*7 }}</code> proves expression evaluation (renders "49"); <code>{{ require('child_process').execSync('whoami') }}</code> proves full remote code execution — because this template engine's evaluation context accidentally exposes Node's <code>require</code>, a real, well-documented escalation path in vulnerable Node template engines/sandboxes.</p>
+        </details>
+
+        <details class="variant-detail">
+          <summary>Variant 11 — Log / CRLF Injection (Log Forging) <span class="cwe-tag">CWE-93 / CWE-117</span></summary>
+          <p><strong>Mechanism:</strong> user input containing raw newline characters is written directly into a log line. Since a log viewer treats each newline as a new entry, the attacker can make it look like a second, entirely fabricated log line was written by the server itself.</p>
+          <div class="code-block"><div class="lang">Node.js — routes/a05.js (vulnerable, this app)</div><pre>store.logAudit(\`[AUDIT] Login attempt for user: \${username}\`); // username may contain \n</pre></div>
+          <p><strong>Attack scenario:</strong> submitting a username of <code>attacker\n[AUDIT] Login attempt for user: admin (verified by security team)</code> creates what looks like two separate, legitimate-looking audit entries — useful for covering tracks or framing another account during an incident investigation.</p>
+          <p class="hint">Classic HTTP response splitting (injecting a real extra HTTP header via CRLF in a header value) is blocked by Node's http module itself on modern versions (it throws <code>ERR_INVALID_CHAR</code>) — a good example of a whole vulnerability class being closed off at the platform level. Application-level logs have no equivalent built-in protection, which is why this variant targets those instead.</p>
+        </details>
+
+        <h3>3. How to Prevent It (per OWASP)</h3>
+        <p>The best defense keeps data separate from commands/queries entirely:</p>
+        <ul>
+          <li><strong>Use a safe API</strong> that avoids the interpreter entirely, provides a parameterized interface, or migrates to an ORM. Note: even parameterized stored procedures can reintroduce SQL injection if they concatenate query text internally or use <code>EXECUTE IMMEDIATE</code>/<code>exec()</code> on hostile data.</li>
+          <li>When separation isn't possible: <strong>positive server-side input validation</strong> (not a complete defense alone, since many apps legitimately need special characters).</li>
+          <li>For any residual dynamic queries: <strong>escape special characters</strong> using the specific escape syntax for that interpreter. Note: structural elements like table/column names can't be escaped — user-supplied structure names are inherently dangerous (a common issue in report-writing software).</li>
+        </ul>
+        <p class="hint">OWASP's own warning: manual escaping/parsing of complex strings is error-prone and fragile against minor changes to the underlying system — safe APIs and parameterization are strongly preferred over hand-rolled escaping.</p>
+
+        <h3>4. Notable Mapped CWEs (OWASP Top 10:2025)</h3>
+        <table class="ref-table">
+          <tr><th>CWE</th><th>Name</th></tr>
+          <tr><td>CWE-89</td><td>SQL Injection</td></tr>
+          <tr><td>CWE-79 / CWE-80 / CWE-83</td><td>Cross-site Scripting (basic / attribute-based)</td></tr>
+          <tr><td>CWE-77 / CWE-78</td><td>Command Injection / OS Command Injection</td></tr>
+          <tr><td>CWE-90</td><td>LDAP Injection</td></tr>
+          <tr><td>CWE-91 / CWE-643</td><td>XML/XPath Injection (aka Blind XPath Injection)</td></tr>
+          <tr><td>CWE-93 / CWE-113</td><td>CRLF Injection / HTTP Response Splitting</td></tr>
+          <tr><td>CWE-94 / CWE-95 / CWE-96</td><td>Code Injection ('Eval Injection' / Static Code Injection)</td></tr>
+          <tr><td>CWE-564</td><td>SQL Injection: Hibernate (HQL)</td></tr>
+          <tr><td>CWE-917</td><td>Expression Language Injection</td></tr>
+          <tr><td>CWE-610</td><td>Externally Controlled Reference to a Resource in Another Sphere</td></tr>
+        </table>
+        <p class="hint">Full list and sourcing: <a href="https://owasp.org/Top10/2025/A05_2025-Injection/" target="_blank" rel="noopener">owasp.org/Top10/2025/A05_2025-Injection</a>. NoSQL injection (Variant 7) is named in OWASP's description text but has no dedicated CWE ID in their mapped list — CWE-943 is the industry-standard citation used here.</p>
+
+      </div>
+    </div>
+  </div>
+
+  <script src="/a05/a05.js"></script>
 </body>
 </html>

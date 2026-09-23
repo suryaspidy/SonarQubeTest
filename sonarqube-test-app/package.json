@@ -1,8 +1,11 @@
 {
   "name": "owasp-top10-lab",
   "version": "1.0.0",
-  "description": "Intentionally vulnerable Node.js/Express application for learning the OWASP Top 10 (2021). Each category gets its own screen; SonarQube (SAST) and manual/DAST testing are both supported.",
+  "description": "Intentionally vulnerable Node.js/Express application for learning the OWASP Top 10:2025. Each category gets its own screen; SonarQube (SAST) and manual/DAST testing are both supported.",
   "main": "server.js",
+  "engines": {
+    "node": ">=22.5.0"
+  },
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js"

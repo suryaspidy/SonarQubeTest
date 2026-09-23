@@ -1,11 +1,11 @@
 /**
- * Front-end for the A02: Cryptographic Failures screen. No login is
- * required for this category — every variant is about data at rest, in
- * transit, or crypto primitives, not about who's asking.
+ * Front-end for the A02: Security Misconfiguration screen. No login is
+ * required — every variant is about how the app/server/platform is
+ * configured, not who's asking.
  */
 
-async function api(method, url, body) {
-  const opts = { method, headers: { 'Content-Type': 'application/json' } };
+async function api(method, url, body, headers) {
+  const opts = { method, headers: { 'Content-Type': 'application/json', ...(headers || {}) } };
   if (body !== undefined) opts.body = JSON.stringify(body);
   const res = await fetch(url, opts);
   let data;
@@ -17,99 +17,58 @@ function show(id, result) {
   document.getElementById(id).textContent = `HTTP ${result.status}\n` + JSON.stringify(result.data, null, 2);
 }
 
-/* Variant 1 — Cleartext storage at rest */
+/* Variant 1 — Default admin credentials */
 async function v1() {
-  show('v1_out', await api('GET', '/api/a02/payment-methods'));
+  const username = document.getElementById('v1_user').value;
+  const password = document.getElementById('v1_pass').value;
+  show('v1_out', await api('POST', '/api/a02/admin-login', { username, password }));
 }
 
-/* Variant 2 — Weak/broken hashing */
-async function v2list() {
-  show('v2_list_out', await api('GET', '/api/a02/weak-hash-users'));
-}
-async function v2crack() {
-  const hash = document.getElementById('v2_hash').value.trim();
-  if (!hash) return show('v2_out', { status: 'client-error', data: 'Paste a passwordHash first (fetch the list above).' });
-  show('v2_out', await api('POST', '/api/a02/crack-hash', { hash }));
+/* Variant 2 — Directory listing + exposed files */
+async function v2() {
+  show('v2_out', await api('GET', '/api/a02/directory-listing'));
 }
 
-/* Variant 3 — Reversible encryption instead of hashing */
-async function v3list() {
-  show('v3_list_out', await api('GET', '/api/a02/legacy-users'));
-}
-async function v3decrypt() {
-  const id = document.getElementById('v3_id').value;
-  show('v3_out', await api('GET', `/api/a02/legacy-users/${id}/decrypt`));
+/* Variant 3 — Verbose error / stack trace */
+async function v3() {
+  show('v3_out', await api('GET', '/api/a02/trigger-error'));
 }
 
-/* Variant 4 — Hard-coded keys */
+/* Variant 4 — Active debug code (eval endpoint) */
 async function v4() {
-  show('v4_out', await api('GET', '/api/a02/leaked-config'));
+  const expr = document.getElementById('v4_expr').value;
+  show('v4_out', await api('GET', `/api/a02/debug/eval?expr=${encodeURIComponent(expr)}`));
 }
 
-/* Variant 5 — ECB vs CBC+random IV */
+/* Variant 5 — Env var exposure */
 async function v5() {
-  const pin1 = document.getElementById('v5_pin1').value;
-  const pin2 = document.getElementById('v5_pin2').value;
-  show('v5_out', await api('POST', '/api/a02/ecb-demo', { pin1, pin2 }));
+  show('v5_out', await api('GET', '/api/a02/debug/env'));
 }
 
-/* Variant 6 — Transport & cookie security */
-async function v6() {
-  show('v6_out', await api('GET', '/api/a02/security-headers'));
+/* Variant 6 — Hard-coded bypass constant */
+async function v6(withBypass) {
+  const headers = withBypass ? { 'X-Internal-Bypass': 'lab-internal-9f3a' } : {};
+  show('v6_out', await api('GET', '/api/a02/premium-report', undefined, headers));
 }
 
-/* Variant 7 — Insecure randomness / brute-forceable reset token */
-async function v7request() {
-  const email = document.getElementById('v7_email').value;
-  show('v7_req_out', await api('POST', '/api/a02/reset/request', { email }));
+/* Variant 7 — Insecure cookie flags */
+async function v7() {
+  show('v7_out', await api('GET', '/api/a02/admin-session'));
 }
 
-async function v7bruteforce() {
-  const email = document.getElementById('v7_email').value;
-  const out = document.getElementById('v7_out');
-  out.textContent = 'Brute-forcing 000-999…';
-  const start = Date.now();
-  const BATCH = 50;
-  for (let base = 0; base < 1000; base += BATCH) {
-    const batch = [];
-    for (let i = base; i < Math.min(base + BATCH, 1000); i++) {
-      const token = String(i).padStart(3, '0');
-      batch.push(
-        api('POST', '/api/a02/reset/verify', { email, token }).then((r) => ({ token, ...r.data }))
-      );
-    }
-    const results = await Promise.all(batch);
-    const found = results.find((r) => r.valid);
-    if (found) {
-      out.textContent = `Cracked in ${Date.now() - start}ms — valid reset code was "${found.token}" (tried up to ${base + BATCH} of 1000 combinations).`;
-      return;
-    }
-  }
-  out.textContent = `No valid code found in ${Date.now() - start}ms — did you click "Request reset code" first?`;
+/* Variant 8 — Permissive cloud storage */
+async function v8list() {
+  show('v8_list_out', await api('GET', '/api/a02/cloud-bucket'));
+}
+async function v8get() {
+  const key = document.getElementById('v8_key').value;
+  show('v8_out', await api('GET', `/api/a02/cloud-bucket/${key}`));
 }
 
-/* Variant 8 — TLS certificate validation */
-async function v8() {
-  const target = document.getElementById('v8_target').value;
-  show('v8_out', await api('GET', `/api/a02/tls-check?target=${encodeURIComponent(target)}`));
-}
-
-/* Variant 9 — Sensitive data in logs */
-async function v9login() {
-  const username = document.getElementById('v9_user').value;
-  const password = document.getElementById('v9_pass').value;
-  show('v9_out', await api('POST', '/api/a02/legacy-login', { username, password }));
-}
-
-/* Shared log viewer (Variants 9 & 10) */
-async function viewLogs(outId) {
-  show(outId, await api('GET', '/api/a02/logs'));
-}
-
-/* Variant 10 — Sensitive data in URL */
-async function v10() {
-  const email = document.getElementById('v10_email').value;
-  show('v10_out', await api('POST', '/api/a02/magic-link', { email }));
+/* Variant 9 — XXE */
+async function v9() {
+  const xml = document.getElementById('v9_xml').value;
+  show('v9_out', await api('POST', '/api/a02/xxe-parse', { xml }));
 }
 
 /* "Learn A02" deep-dive modal */

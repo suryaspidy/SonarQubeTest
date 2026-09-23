@@ -8,7 +8,7 @@
 </head>
 <body>
   <header class="topbar">
-    <h1>🧪 OWASP Top 10 (2021) Learning Lab</h1>
+    <h1>🧪 OWASP Top 10:2025 Learning Lab</h1>
     <span class="hint">SonarQube SAST + manual DAST training app</span>
   </header>
 
@@ -27,15 +27,15 @@
   <script>
     const categories = [
       { code: 'A01', name: 'Broken Access Control', desc: 'IDOR, privilege escalation, mass assignment, verb tampering, tenant leakage, CSRF, and more.', href: '/a01/', ready: true },
-      { code: 'A02', name: 'Cryptographic Failures', desc: 'Weak/broken crypto, plaintext storage & transit of sensitive data.', href: '/a02/', ready: true },
-      { code: 'A03', name: 'Injection', desc: 'SQL, OS command, and code injection.', href: '/a03/', ready: false },
-      { code: 'A04', name: 'Insecure Design', desc: 'Missing threat modeling and secure design patterns.', href: '/a04/', ready: false },
-      { code: 'A05', name: 'Security Misconfiguration', desc: 'Default creds, verbose errors, missing hardening.', href: '/a05/', ready: false },
-      { code: 'A06', name: 'Vulnerable & Outdated Components', desc: 'Unpatched/unsupported dependencies.', href: '/a06/', ready: false },
-      { code: 'A07', name: 'Identification & Authentication Failures', desc: 'Weak auth, session, and credential handling.', href: '/a07/', ready: false },
-      { code: 'A08', name: 'Software & Data Integrity Failures', desc: 'Insecure deserialization & unverified updates.', href: '/a08/', ready: false },
-      { code: 'A09', name: 'Security Logging & Monitoring Failures', desc: 'Missing/insufficient logging and alerting.', href: '/a09/', ready: false },
-      { code: 'A10', name: 'Server-Side Request Forgery (SSRF)', desc: 'Server fetches attacker-controlled URLs.', href: '/a10/', ready: false },
+      { code: 'A02', name: 'Security Misconfiguration', desc: 'Default creds, verbose errors, exposed backups, debug code, XXE, and more.', href: '/a02/', ready: true },
+      { code: 'A03', name: 'Software Supply Chain Failures', desc: 'Vulnerable/outdated dependencies, unverified packages, build-pipeline risk.', href: '/a03/', ready: false },
+      { code: 'A04', name: 'Cryptographic Failures', desc: 'Weak/broken crypto, plaintext storage & transit of sensitive data.', href: '/a04/', ready: true },
+      { code: 'A05', name: 'Injection', desc: 'SQL, NoSQL, OS command, LDAP, XPath, template injection, and XSS.', href: '/a05/', ready: true },
+      { code: 'A06', name: 'Insecure Design', desc: 'Missing threat modeling and secure design patterns.', href: '/a06/', ready: false },
+      { code: 'A07', name: 'Authentication Failures', desc: 'Weak auth, session, and credential handling.', href: '/a07/', ready: false },
+      { code: 'A08', name: 'Software or Data Integrity Failures', desc: 'Insecure deserialization & unverified updates.', href: '/a08/', ready: false },
+      { code: 'A09', name: 'Security Logging and Alerting Failures', desc: 'Missing/insufficient logging and alerting.', href: '/a09/', ready: false },
+      { code: 'A10', name: 'Mishandling of Exceptional Conditions', desc: 'Errors and edge cases handled in ways that create security gaps.', href: '/a10/', ready: false },
     ];
 
     const grid = document.getElementById('grid');

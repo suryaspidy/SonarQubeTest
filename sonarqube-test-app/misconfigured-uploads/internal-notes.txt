@@ -1,0 +1,8 @@
+Internal deployment notes — NOT for public distribution.
+
+- Staging admin console still uses the factory default admin/admin login,
+  ticket SEC-1042 to rotate it has been open since last quarter.
+- Remember to disable the /api/a02/debug/eval endpoint before the next
+  production push (see DEBUG_MODE flag in routes/a02.js) — TODO, never done.
+- The internal bypass header for the premium-report endpoint is
+  X-Internal-Bypass: lab-internal-9f3a — rotate this if it ever leaks.

@@ -1,6 +1,6 @@
 /**
  * ============================================================================
- *  ⚠️  OWASP A01:2021 — BROKEN ACCESS CONTROL  ⚠️
+ *  ⚠️  OWASP A01:2025 — BROKEN ACCESS CONTROL  ⚠️
  * ============================================================================
  * Every route below is deliberately vulnerable, for training / SonarQube
  * SAST validation / manual DAST practice only. Login first via POST /login
@@ -241,7 +241,7 @@ router.get('/transfer', fakeAuth, (req, res) => {
 /* ------------------------------------------------------------------------
  * Variant 11: Path Traversal Bypassing Access Restriction on Files
  *             — CWE-22 / CWE-23
- *             (Officially mapped under A01:2021 in OWASP's Top 10 CWE list)
+ *             (Officially mapped under A01:2025 in OWASP's Top 10 CWE list)
  *   GET /api/a01/files?tenant=tenant-1&name=invoice.txt
  *   Meant to let a logged-in user read only their own tenant's invoice
  *   folder (private/<tenant>/), but the "name" parameter is joined onto
