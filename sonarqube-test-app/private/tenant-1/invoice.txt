@@ -1,0 +1,6 @@
+Acme Corp — Invoice #A-1001
+Bill to: Acme Corp Finance Department
+Item: Server rack
+Amount: $5000
+Payment method: Internal PO#552
+--- CONFIDENTIAL — Acme Corp tenant only ---

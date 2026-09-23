@@ -1,0 +1,6 @@
+Globex Inc — Invoice #G-2001
+Bill to: Globex Inc Accounts Payable
+Item: Phone
+Amount: $800
+Payment method: Card ending 1234
+--- CONFIDENTIAL — Globex Inc tenant only ---

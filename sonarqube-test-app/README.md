@@ -1,224 +1,100 @@
-# SonarQube Test App
+# OWASP Top 10 (2021) Learning Lab
 
-An **intentionally vulnerable** Node.js/Express web application built to validate
-security-testing tooling — specifically SonarQube's static analysis (SAST), and
-optionally a DAST scanner (OWASP ZAP) or an IAST agent (e.g. Contrast, Seeker)
-run against the live app.
+⚠️ **Intentionally vulnerable application.** Built for local security training,
+SonarQube (SAST) rule validation, and manual/DAST practice (OWASP ZAP, Burp
+Suite, curl). Never deploy this to a shared network or the public internet.
 
-> ⚠️ **This app is deliberately insecure.** Never deploy it to a shared network,
-> a cloud VM with a public IP, or production. Run it only on localhost / an
-> isolated container for testing.
+## Structure
 
----
-
-## What "SAST / DAST / IAST" actually means here
-
-| Type | What it tests | Tool in this workflow |
-|------|----------------|------------------------|
-| **SAST** (Static) | Reads source code without running it; flags risky patterns (SQL string concat, `eval`, hardcoded secrets, weak crypto, etc.) | **SonarQube** — this is what SonarQube is built for |
-| **DAST** (Dynamic) | Sends real HTTP requests to the *running* app and observes behavior (reflected payloads, redirects, headers) | **OWASP ZAP** or **Burp Suite** (SonarQube itself does not do DAST) |
-| **IAST** (Interactive) | An agent instrumented inside the running app watches code paths as you exercise it via the UI/API | A dedicated IAST agent (e.g. Contrast Community Edition) — not a SonarQube feature |
-
-So: use SonarQube for the SAST pass on the source code, and (optionally) point
-ZAP or an IAST agent at the running app for the other two. The app below gives
-you real findings for all three.
-
----
-
-## Vulnerabilities included
-
-| # | Endpoint | Vulnerability | CWE |
-|---|----------|---------------|-----|
-| 1 | `GET /search?q=` | SQL Injection (string concatenation) | CWE-89 |
-| 2 | `GET /greet?name=` | Reflected XSS | CWE-79 |
-| 3 | `POST/GET /comments` | Stored XSS | CWE-79 |
-| 4 | `GET /ping?host=` | OS Command Injection | CWE-78 |
-| 5 | `GET /file?name=` | Path Traversal | CWE-22 |
-| 6 | `POST /login` | Hardcoded credentials, weak hash (MD5), sensitive data in logs | CWE-798, CWE-327, CWE-532 |
-| 7 | `GET /profile/:id` | Insecure Direct Object Reference (no auth check) | CWE-639 |
-| 8 | `GET /redirect?url=` | Open Redirect | CWE-601 |
-| 9 | `GET /fetch?url=` | Server-Side Request Forgery (SSRF) | CWE-918 |
-| 10 | `POST /calculate` | Code Injection via `eval()` | CWE-95 |
-| 11 | `GET /debug` | Information Disclosure (env vars, secrets) | CWE-215 |
-| 12 | `POST /import` | Insecure Deserialization (`Function` constructor) | CWE-502 |
-
-### OWASP A01:2021 — Broken Access Control (8 variants)
-
-Login via `POST /login` first (e.g. `alice`/`alice123`, `bob`/`bobpass`, or
-`admin`/`Admin@123`), then send the returned token as
-`Authorization: Bearer <token>`. The dashboard's "Broken Access Control"
-panel does all of this for you, including a button that decodes and
-tampers with the token in the browser.
-
-> The token itself is **unsigned** (`base64(JSON)`, see `issueToken`/
-> `decodeToken` in `server.js`) — that lack of a signature is what makes
-> Variant 6 (and by extension several others) exploitable.
-
-| # | Endpoint | Vulnerability | CWE |
-|---|----------|---------------|-----|
-| 1 | `GET /api/orders/:id` | IDOR / Horizontal Privilege Escalation — read another user's order by changing the id | CWE-639 |
-| 2 | `GET /api/admin/users` | Vertical Privilege Escalation — admin-only listing missing its `requireAdmin` check | CWE-862 |
-| 3 | `PUT /api/users/:id/profile` | Mass Assignment — request body merged straight onto the DB row, so `{"role":"admin"}` sticks | CWE-915 |
-| 4 | `GET` vs `DELETE /api/admin/orders/:id` | HTTP Verb Tampering — GET is protected, DELETE on the same path forgot the same check | CWE-650 |
-| 5 | `GET /api/tenants/:tenantId/orders` | Multi-Tenant Data Leakage — tenant ID from the URL is trusted instead of the token's tenant | CWE-668 |
-| 6 | `GET /api/whoami` | JWT/Token Tampering — server trusts an unsigned, client-editable role claim | CWE-347 |
-| 7 | `GET /admin.html` | Forced Browsing — admin panel reachable directly, no auth check, just unlinked from the nav | CWE-425 |
-| 8 | `DELETE /api/orders/:id/force` | Client-Side-Only Access Control — restriction exists only as a hidden UI button, zero backend check | CWE-602 |
-
-Variants 1–5 are the ones most commonly tested for OWASP A01; 6–8 round out
-the same category with related, equally common real-world patterns
-(unsigned tokens, forced browsing, and security-through-UI-hiding).
-
-Plus app-wide issues SonarQube will also flag:
-- Overly permissive CORS (`origin: '*'` with `credentials: true`) — CWE-942
-- Missing security headers (no Helmet/CSP/HSTS) — CWE-693
-- Verbose error messages leaking internals — CWE-209
-
-A dashboard UI (`public/index.html`) lets you trigger every case from a browser
-— useful when driving a DAST scan or IAST agent, not just SAST.
-
----
-
-## Project structure
+The app has one screen per OWASP Top 10 (2021) category, reachable from the
+dashboard at `/`. Only **A01: Broken Access Control** is implemented so far —
+the rest (A02–A10) are placeholder screens, ready to be filled in the same
+way, category by category.
 
 ```
-sonarqube-test-app/
-├── server.js                 # Express app with all vulnerable routes
-├── package.json
-├── sonar-project.properties   # SonarScanner CLI config
-├── .gitignore
-├── files/notes.txt            # target file for the path-traversal demo
-└── public/
-    ├── index.html             # dashboard to exercise every test case
-    ├── style.css
-    └── app.js
+server.js              Express app entry point, mounts each category's router
+utils/auth.js           Shared (deliberately unsigned) token issue/verify + middleware
+data/store.js           In-memory users/orders "database" + two demo tenants
+routes/a01.js           All A01 vulnerable endpoints, under /api/a01/*
+private/                Per-tenant files used by the path-traversal variant
+public/index.html       Dashboard — links to each category screen
+public/a01/             A01 screen: index.html (UI), a01.js (client logic),
+                        admin-panel.html (forced-browsing target),
+                        csrf-poc.html (simulated malicious page)
+public/a02 … public/a10 Placeholder screens
 ```
 
----
-
-## Running it locally
+## Running it
 
 ```bash
 npm install
 npm start
-# App runs at http://localhost:3000
+# open http://localhost:3000
 ```
 
-Open `http://localhost:3000` in a browser to use the dashboard, or hit the
-endpoints directly with curl, e.g.:
+## Demo accounts (A01)
 
-```bash
-curl "http://localhost:3000/search?q=' OR '1'='1"
-curl "http://localhost:3000/file?name=../../../../etc/passwd"
-```
+| username | password     | role  | tenant     |
+|----------|--------------|-------|------------|
+| alice    | alice123     | user  | Acme Corp  |
+| bob      | bobpass      | user  | Globex Inc |
+| admin    | Admin@123    | admin | Acme Corp  |
+| carol    | carolpass    | user  | Globex Inc |
+| mallory  | mallorypass  | user  | Acme Corp (attacker persona used by the CSRF PoC) |
 
----
+## A01:2021 — Broken Access Control
 
-## Running a SonarQube SAST scan
+The auth layer (`utils/auth.js`) issues a token that is just
+`base64(JSON.stringify(payload))` — **no signature at all**. That single root
+cause (CWE-347) is what makes several variants below trivially exploitable:
+decode the token, edit `role`/`tenantId`/`id`, re-encode, resend.
 
-### Option A — SonarQube Community Server via Docker (quickest)
+| # | Variant | CWE | Endpoint |
+|---|---------|-----|----------|
+| 1 | Insecure Direct Object Reference (IDOR) / Horizontal Privilege Escalation | CWE-639 | `GET /api/a01/orders/:id` |
+| 2 | Vertical Privilege Escalation (Missing Function-Level Access Control) | CWE-862 | `GET /api/a01/admin/users` |
+| 3 | Mass Assignment / Parameter Tampering (Privilege Escalation via Payload) | CWE-915 | `PUT /api/a01/users/:id/profile` |
+| 4 | HTTP Verb / Method Tampering | CWE-650 | `GET`/`DELETE /api/a01/admin/orders/:id` |
+| 5 | Multi-Tenant Data Leakage (Tenant Isolation Bypass) | CWE-668 | `GET /api/a01/tenants/:tenantId/orders` |
+| 6 | JWT / Token Tampering (Trusting an Unsigned Claim) | CWE-347 | `GET /api/a01/whoami` |
+| 7 | Forced Browsing to an Unprotected Admin Resource | CWE-425 | `GET /a01/admin-panel.html` + `GET /api/a01/admin/stats` |
+| 8 | Client-Side-Only Access Control | CWE-602 | `DELETE /api/a01/orders/:id/force` |
+| 9 | CORS Misconfiguration (Overly Permissive Cross-Origin Access) | CWE-942 | `GET /api/a01/account` |
+| 10 | Cross-Site Request Forgery (CSRF) | CWE-352 | `GET /api/a01/transfer` |
+| 11 | Path Traversal Bypassing Access Restriction on Files | CWE-22 / CWE-23 | `GET /api/a01/files` |
 
-```bash
-docker run -d --name sonarqube -p 9000:9000 sonarqube:community
-# wait ~1 min, then log in at http://localhost:9000 (default admin/admin, forced reset)
-```
+Variants 1–5 were the ones requested up front; 6–11 were added because
+they're also officially part of OWASP's A01:2021 category (either directly —
+CSRF and the CWE-22/23 path-traversal CWEs are explicitly mapped to A01 in
+the 2021 revision — or because they're extremely common real-world causes of
+broken access control that complement the first five: unsigned/tampered
+tokens, forced browsing, UI-only enforcement, and permissive CORS).
 
-Create a project and a token in the SonarQube UI (My Account → Security →
-Generate Token), then from the project root:
+Each variant's panel on the `/a01/` screen includes: what to try, a live
+"Try it" control wired to the real API, and a remediation note. Full exploit
+narratives and the vulnerable code itself are commented inline in
+`routes/a01.js` and `utils/auth.js`.
 
-```bash
-# Install the scanner CLI (macOS example; see SonarQube docs for your OS)
-brew install sonar-scanner
+### Quick manual walkthrough
 
-sonar-scanner \
-  -Dsonar.projectKey=sonarqube-test-app \
-  -Dsonar.sources=. \
-  -Dsonar.host.url=http://localhost:9000 \
-  -Dsonar.token=<YOUR_GENERATED_TOKEN>
-```
+1. Open `http://localhost:3000/a01/` and log in as **alice**.
+2. Variant 1: fetch order `2` (bob's) — returned with no ownership check.
+3. Variant 2: call the admin users list while still alice — works.
+4. Variant 6: edit the decoded token to `"role":"admin"`, re-encode, then
+   retry variant 2/4/anything admin-gated — now it "legitimately" passes the
+   (broken) admin check too.
+5. Variant 10: log in as alice, then open the CSRF PoC page in a new tab —
+   watch alice's credits move to mallory with no confirmation.
 
-The `sonar-project.properties` file already in this repo sets most of this,
-so once configured you can usually just run `sonar-scanner -Dsonar.token=...`.
+## Extending to the next category
 
-### Option B — SonarCloud / SonarQube Cloud
+When you're ready for the next OWASP category (A02, A03, …):
 
-If your org uses SonarQube's hosted SaaS instead, connect the Git repo
-directly in the SonarQube Cloud UI ("Analyze new project" → pick your repo)
-and it will scan on push via its own CI integration — no local scanner needed.
-
-### What to expect
-
-SonarQube's SAST engine should flag most of the 12 issues above (SQL
-injection via string concatenation, `eval`/`Function` usage, weak hash
-algorithms, hardcoded credentials, permissive CORS, logging of sensitive
-data) as **Security Hotspots** or **Vulnerabilities**, categorized by
-severity (Blocker/Critical/Major) and mapped to CWE/OWASP Top 10 categories
-in the SonarQube dashboard.
-
----
-
-## (Optional) Running a DAST pass with OWASP ZAP
-
-```bash
-docker run -t owasp/zap2docker-stable zap-baseline.py \
-  -t http://host.docker.internal:3000 -r zap-report.html
-```
-
-ZAP will independently discover things like the reflected XSS, open
-redirect, and missing security headers by actually sending requests to the
-running app — a good complement to SonarQube's static findings.
-
----
-
-## Pushing this project to your own Git repository
-
-From inside the `sonarqube-test-app` folder:
-
-```bash
-# 1. Initialize git (skip if already a repo)
-git init
-
-# 2. Stage and commit everything
-git add .
-git commit -m "Add intentionally vulnerable app for SonarQube SAST/DAST testing"
-
-# 3. Create an empty repo on GitHub/GitLab/Bitbucket first (via their web UI),
-#    then link it as the remote — replace the URL with your repo's URL:
-git remote add origin https://github.com/<your-username>/sonarqube-test-app.git
-
-# 4. Rename local branch to main (if it isn't already)
-git branch -M main
-
-# 5. Push
-git push -u origin main
-```
-
-If you're using SSH instead of HTTPS:
-
-```bash
-git remote add origin git@github.com:<your-username>/sonarqube-test-app.git
-git push -u origin main
-```
-
-If the remote repo already has commits (e.g. a README created on GitHub),
-pull first to avoid a rejected push:
-
-```bash
-git pull origin main --allow-unrelated-histories
-git push -u origin main
-```
-
-### Suggested `.gitignore` note
-`node_modules/` is already excluded — anyone cloning the repo just runs
-`npm install` to restore dependencies.
-
----
-
-## Safe-guarding this repo
-
-Since this code is intentionally vulnerable, consider:
-- Naming the repo clearly (e.g. `sonarqube-test-app`, or add a `SECURITY.md`
-  stating it's a test fixture) so it isn't mistaken for production code.
-- Keeping it in a private repo unless it's meant to be a public teaching example.
-- Not connecting the running instance to any real, sensitive data source —
-  the seeded SQLite database is in-memory and resets on every restart.
+1. Add `routes/aXX.js` following the same pattern (import `data/store`,
+   `utils/auth` as needed).
+2. Mount it in `server.js`: `app.use('/api/aXX', aXXRoutes)`.
+3. Build `public/aXX/index.html` + `public/aXX/aXX.js` replacing the
+   placeholder, following the A01 screen's layout (session bar, one
+   `<section class="variant">` per variant, remediation footer).
+4. Flip that category's `ready: false` to `ready: true` in
+   `public/index.html`.

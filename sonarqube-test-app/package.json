@@ -1,24 +1,25 @@
 {
-  "name": "sonarqube-test-app",
+  "name": "owasp-top10-lab",
   "version": "1.0.0",
-  "description": "Intentionally vulnerable Node.js/Express application for validating SonarQube SAST rules and for exercising DAST/IAST scanners.",
+  "description": "Intentionally vulnerable Node.js/Express application for learning the OWASP Top 10 (2021). Each category gets its own screen; SonarQube (SAST) and manual/DAST testing are both supported.",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js"
   },
   "keywords": [
+    "owasp",
+    "owasp-top-10",
     "sonarqube",
     "sast",
     "dast",
-    "security-testing",
+    "security-training",
     "vulnerable-app"
   ],
   "license": "MIT",
   "dependencies": {
+    "cookie-parser": "^1.4.6",
     "cors": "^2.8.5",
-    "express": "^4.19.2",
-    "node-fetch": "^2.7.0",
-    "sqlite3": "^5.1.7"
+    "express": "^4.19.2"
   }
 }

@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Internal Admin Panel</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <h1>🔐 Internal Admin Panel</h1>
+    <a class="home-link" href="/a01/">&larr; Back to A01</a>
+  </header>
+
+  <div class="banner">
+    Variant 7 demo — Forced Browsing (CWE-425): this page is not linked anywhere in the app's navigation, and neither this page nor the API it calls perform ANY authentication or role check. You reached it just by knowing/guessing the URL.
+  </div>
+
+  <main>
+    <section class="variant">
+      <h2>System stats</h2>
+      <pre class="out" id="out">Loading…</pre>
+    </section>
+  </main>
+
+  <script>
+    fetch('/api/a01/admin/stats')
+      .then((r) => r.json())
+      .then((data) => { document.getElementById('out').textContent = JSON.stringify(data, null, 2); })
+      .catch((e) => { document.getElementById('out').textContent = String(e); });
+  </script>
+</body>
+</html>

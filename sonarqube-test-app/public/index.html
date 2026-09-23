@@ -2,189 +2,51 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>SonarQube Test App — Vulnerability Dashboard</title>
-<link rel="stylesheet" href="style.css" />
+<title>OWASP Top 10 Learning Lab</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="stylesheet" href="/style.css" />
 </head>
 <body>
-  <header>
-    <h1>⚠️ SonarQube Test App</h1>
-    <p>Intentionally vulnerable dashboard used to exercise SAST/DAST/IAST tooling. Do not deploy publicly.</p>
+  <header class="topbar">
+    <h1>🧪 OWASP Top 10 (2021) Learning Lab</h1>
+    <span class="hint">SonarQube SAST + manual DAST training app</span>
   </header>
 
-  <main>
-    <section class="card">
-      <h2>1. SQL Injection <span class="tag">CWE-89</span></h2>
-      <p>Search users by username. Try: <code>' OR '1'='1</code></p>
-      <input id="sqlInput" placeholder="username" value="alice" />
-      <button onclick="runSearch()">Search</button>
-      <pre id="sqlOut"></pre>
-    </section>
-
-    <section class="card">
-      <h2>2. Reflected XSS <span class="tag">CWE-79</span></h2>
-      <p>Try: <code>&lt;script&gt;alert(1)&lt;/script&gt;</code></p>
-      <input id="xssInput" placeholder="name" value="Guest" />
-      <button onclick="runGreet()">Greet</button>
-      <div id="xssOut" class="output-box"></div>
-    </section>
-
-    <section class="card">
-      <h2>3. Stored XSS <span class="tag">CWE-79</span></h2>
-      <p>Try: <code>&lt;img src=x onerror=alert(1)&gt;</code></p>
-      <input id="commentInput" placeholder="comment body" />
-      <button onclick="postComment()">Post comment</button>
-      <button onclick="loadComments()">Load comments</button>
-      <div id="commentsOut" class="output-box"></div>
-    </section>
-
-    <section class="card">
-      <h2>4. OS Command Injection <span class="tag">CWE-78</span></h2>
-      <p>Try: <code>127.0.0.1; id</code></p>
-      <input id="pingInput" placeholder="host" value="127.0.0.1" />
-      <button onclick="runPing()">Ping</button>
-      <pre id="pingOut"></pre>
-    </section>
-
-    <section class="card">
-      <h2>5. Path Traversal <span class="tag">CWE-22</span></h2>
-      <p>Try: <code>../../../../etc/passwd</code></p>
-      <input id="fileInput" placeholder="file name" value="notes.txt" />
-      <button onclick="runFile()">Read file</button>
-      <pre id="fileOut"></pre>
-    </section>
-
-    <section class="card">
-      <h2>6. Broken Auth / Hardcoded Creds <span class="tag">CWE-798</span></h2>
-      <p>Backdoor: <code>admin / Admin@123</code></p>
-      <input id="userInput" placeholder="username" value="admin" />
-      <input id="passInput" placeholder="password" type="password" value="Admin@123" />
-      <button onclick="runLogin()">Login</button>
-      <pre id="loginOut"></pre>
-    </section>
-
-    <section class="card">
-      <h2>7. IDOR <span class="tag">CWE-639</span></h2>
-      <p>Fetch any user's profile by id with no auth check.</p>
-      <input id="idorInput" placeholder="user id" value="1" />
-      <button onclick="runIdor()">Fetch profile</button>
-      <pre id="idorOut"></pre>
-    </section>
-
-    <section class="card">
-      <h2>8. Open Redirect <span class="tag">CWE-601</span></h2>
-      <input id="redirectInput" placeholder="url" value="https://example.com" />
-      <button onclick="runRedirect()">Go</button>
-    </section>
-
-    <section class="card">
-      <h2>9. SSRF <span class="tag">CWE-918</span></h2>
-      <input id="ssrfInput" placeholder="url" value="http://example.com" />
-      <button onclick="runFetch()">Fetch on server</button>
-      <pre id="ssrfOut"></pre>
-    </section>
-
-    <section class="card">
-      <h2>10. Code Injection via eval() <span class="tag">CWE-95</span></h2>
-      <input id="evalInput" placeholder="expression" value="2+2" />
-      <button onclick="runCalc()">Evaluate</button>
-      <pre id="calcOut"></pre>
-    </section>
-
-    <section class="card">
-      <h2>11. Debug / Info Disclosure <span class="tag">CWE-215</span></h2>
-      <button onclick="runDebug()">Hit /debug</button>
-      <pre id="debugOut"></pre>
-    </section>
-
-    <section class="card">
-      <h2>12. Insecure Deserialization <span class="tag">CWE-502</span></h2>
-      <input id="importInput" placeholder="data" value="{a:1,b:2}" />
-      <button onclick="runImport()">Import</button>
-      <pre id="importOut"></pre>
-    </section>
-  </main>
-
-  <header style="margin-top: 8px;">
-    <h1>OWASP A01:2021 — Broken Access Control</h1>
-    <p>Log in first, then run each variant. Try logging in as alice/alice123 (tenant 1, user), bob/bobpass (tenant 2, user), or admin/Admin@123 (tenant 1, admin).</p>
-  </header>
+  <div class="banner">
+    ⚠️ Intentionally vulnerable application. For local security training and static/dynamic analysis testing only — never expose this to a shared or public network.
+  </div>
 
   <main>
-    <section class="card">
-      <h2>Login (issues a tamperable token)</h2>
-      <input id="acUser" placeholder="username" value="alice" />
-      <input id="acPass" placeholder="password" type="password" value="alice123" />
-      <button onclick="acLogin()">Login</button>
-      <pre id="acLoginOut"></pre>
-      <p>Current token (base64, unsigned):</p>
-      <pre id="acTokenOut"></pre>
-    </section>
+    <p class="hint" style="font-size:13px; color:var(--muted);">
+      Pick a category below. Each one gets its own screen with runnable, exploitable examples, exploit instructions, and remediation notes.
+    </p>
 
-    <section class="card">
-      <h2>Variant 1: IDOR / Horizontal Escalation <span class="tag">CWE-639</span></h2>
-      <p>Logged in as alice, try order id <code>2</code> (bob's order).</p>
-      <input id="idorOrderId" placeholder="order id" value="2" />
-      <button onclick="acIdorOrder()">Get order</button>
-      <pre id="acIdorOut"></pre>
-    </section>
-
-    <section class="card">
-      <h2>Variant 2: Vertical Escalation <span class="tag">CWE-862</span></h2>
-      <p>Call an admin-only listing while logged in as a plain user.</p>
-      <button onclick="acAdminUsers()">GET /api/admin/users</button>
-      <pre id="acAdminUsersOut"></pre>
-    </section>
-
-    <section class="card">
-      <h2>Variant 3: Mass Assignment <span class="tag">CWE-915</span></h2>
-      <p>Send a role field the endpoint should never accept from a client.</p>
-      <input id="acMassId" placeholder="user id to edit" value="1" />
-      <input id="acMassBody" placeholder='JSON body' value='{"bio":"hi","role":"admin"}' />
-      <button onclick="acMassAssign()">PUT profile</button>
-      <pre id="acMassOut"></pre>
-    </section>
-
-    <section class="card">
-      <h2>Variant 4: HTTP Verb Tampering <span class="tag">CWE-650</span></h2>
-      <p>GET is protected; try DELETE on the same path.</p>
-      <input id="acVerbId" placeholder="order id" value="1" />
-      <button onclick="acVerbGet()">GET (admin only)</button>
-      <button onclick="acVerbDelete()">DELETE (verb-tampered)</button>
-      <pre id="acVerbOut"></pre>
-    </section>
-
-    <section class="card">
-      <h2>Variant 5: Multi-Tenant Data Leakage <span class="tag">CWE-668</span></h2>
-      <p>Logged in as bob (tenant 2), try tenantId <code>1</code>.</p>
-      <input id="acTenantId" placeholder="tenant id" value="1" />
-      <button onclick="acTenantOrders()">Get tenant orders</button>
-      <pre id="acTenantOut"></pre>
-    </section>
-
-    <section class="card">
-      <h2>Variant 6: JWT / Token Tampering <span class="tag">CWE-347</span></h2>
-      <p>Decode the current token, bump role to admin, re-encode — server trusts it with no signature check.</p>
-      <button onclick="acWhoAmI()">GET /api/whoami (before)</button>
-      <button onclick="acTamperToken()">Tamper token to role=admin</button>
-      <button onclick="acWhoAmI()">GET /api/whoami (after)</button>
-      <pre id="acTamperOut"></pre>
-    </section>
-
-    <section class="card">
-      <h2>Variant 7: Forced Browsing <span class="tag">CWE-425</span></h2>
-      <p>Not linked from this nav — reachable purely by knowing the URL, with zero server-side auth check.</p>
-      <a href="/admin.html" target="_blank"><button>Open /admin.html</button></a>
-    </section>
-
-    <section class="card">
-      <h2>Variant 8: Client-Side-Only Enforcement <span class="tag">CWE-602</span></h2>
-      <p>This button is only shown to "admins" in the UI, but the backend route enforces nothing at all.</p>
-      <input id="acForceId" placeholder="order id" value="1" />
-      <button onclick="acForceDelete()">Force-delete order (no backend check)</button>
-      <pre id="acForceOut"></pre>
-    </section>
+    <div class="grid" id="grid"></div>
   </main>
 
-  <script src="app.js"></script>
+  <script>
+    const categories = [
+      { code: 'A01', name: 'Broken Access Control', desc: 'IDOR, privilege escalation, mass assignment, verb tampering, tenant leakage, CSRF, and more.', href: '/a01/', ready: true },
+      { code: 'A02', name: 'Cryptographic Failures', desc: 'Weak/broken crypto, plaintext storage & transit of sensitive data.', href: '/a02/', ready: false },
+      { code: 'A03', name: 'Injection', desc: 'SQL, OS command, and code injection.', href: '/a03/', ready: false },
+      { code: 'A04', name: 'Insecure Design', desc: 'Missing threat modeling and secure design patterns.', href: '/a04/', ready: false },
+      { code: 'A05', name: 'Security Misconfiguration', desc: 'Default creds, verbose errors, missing hardening.', href: '/a05/', ready: false },
+      { code: 'A06', name: 'Vulnerable & Outdated Components', desc: 'Unpatched/unsupported dependencies.', href: '/a06/', ready: false },
+      { code: 'A07', name: 'Identification & Authentication Failures', desc: 'Weak auth, session, and credential handling.', href: '/a07/', ready: false },
+      { code: 'A08', name: 'Software & Data Integrity Failures', desc: 'Insecure deserialization & unverified updates.', href: '/a08/', ready: false },
+      { code: 'A09', name: 'Security Logging & Monitoring Failures', desc: 'Missing/insufficient logging and alerting.', href: '/a09/', ready: false },
+      { code: 'A10', name: 'Server-Side Request Forgery (SSRF)', desc: 'Server fetches attacker-controlled URLs.', href: '/a10/', ready: false },
+    ];
+
+    const grid = document.getElementById('grid');
+    grid.innerHTML = categories.map(c => `
+      <a class="card ${c.ready ? '' : 'disabled'}" href="${c.ready ? c.href : '#'}">
+        <div class="code">${c.code}</div>
+        <h3>${c.name}</h3>
+        <p>${c.desc}</p>
+        <span class="pill ${c.ready ? 'ready' : 'soon'}">${c.ready ? 'READY' : 'COMING SOON'}</span>
+      </a>
+    `).join('');
+  </script>
 </body>
 </html>
